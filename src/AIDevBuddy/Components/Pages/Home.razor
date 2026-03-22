@@ -1,0 +1,156 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IAgentService AgentService
+@inject IKanbanService KanbanService
+@inject IMessageService MessageService
+
+<PageTitle>AIDevBuddy - Dashboard</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">
+    <RadzenIcon Icon="dashboard" class="rz-mr-2" />Dashboard
+</RadzenText>
+
+@if (_loading)
+{
+    <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+}
+else
+{
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        <RadzenColumn Size="3">
+            <RadzenCard class="rz-background-color-primary-light rz-color-primary">
+                <RadzenStack Gap="8px">
+                    <RadzenIcon Icon="smart_toy" Style="font-size:2rem" />
+                    <RadzenText TextStyle="TextStyle.H3" class="rz-mb-0">@_agentCount</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">Active Agents</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="3">
+            <RadzenCard class="rz-background-color-success-light rz-color-success">
+                <RadzenStack Gap="8px">
+                    <RadzenIcon Icon="task_alt" Style="font-size:2rem" />
+                    <RadzenText TextStyle="TextStyle.H3" class="rz-mb-0">@_cardsDone</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">Cards Done</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="3">
+            <RadzenCard class="rz-background-color-warning-light rz-color-warning">
+                <RadzenStack Gap="8px">
+                    <RadzenIcon Icon="pending" Style="font-size:2rem" />
+                    <RadzenText TextStyle="TextStyle.H3" class="rz-mb-0">@_cardsInProgress</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">In Progress</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="3">
+            <RadzenCard class="rz-background-color-info-light rz-color-info">
+                <RadzenStack Gap="8px">
+                    <RadzenIcon Icon="chat" Style="font-size:2rem" />
+                    <RadzenText TextStyle="TextStyle.H3" class="rz-mb-0">@_messageCount</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">Messages</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="6">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">
+                    <RadzenIcon Icon="smart_toy" class="rz-mr-1" />BMAD Agents
+                </RadzenText>
+                <RadzenDataGrid Data="@_agents" TItem="Agent" AllowPaging="false" AllowSorting="false"
+                                Style="height:300px" Density="Density.Compact">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="Agent" Property="Name" Title="Agent" Width="140px" />
+                        <RadzenDataGridColumn TItem="Agent" Property="Role" Title="Role" Width="120px" />
+                        <RadzenDataGridColumn TItem="Agent" Property="Status" Title="Status" Width="100px">
+                            <Template Context="agent">
+                                <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(agent.Status)" Text="@agent.Status.ToString()" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="6">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">
+                    <RadzenIcon Icon="chat" class="rz-mr-1" />Recent Messages
+                </RadzenText>
+                @if (_recentMessages.Any())
+                {
+                    <RadzenStack Gap="8px">
+                        @foreach (var msg in _recentMessages)
+                        {
+                            <RadzenCard class="rz-p-2">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="8px">
+                                    <RadzenIcon Icon="@(msg.IsBroadcast ? "campaign" : "message")" Style="font-size:1.2rem" />
+                                    <RadzenStack Gap="2px">
+                                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">
+                                            @(msg.Sender?.Name ?? "System") → @(msg.IsBroadcast ? "All" : (msg.Receiver?.Name ?? "?"))
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;">
+                                            @msg.Content
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                                            @msg.SentAt.ToLocalTime().ToString("g")
+                                        </RadzenText>
+                                    </RadzenStack>
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+                    </RadzenStack>
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary">No messages yet.</RadzenText>
+                }
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+}
+
+@code {
+    private bool _loading = true;
+    private List<Agent> _agents = new();
+    private List<AgentMessage> _recentMessages = new();
+    private int _agentCount;
+    private int _cardsDone;
+    private int _cardsInProgress;
+    private int _messageCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _agents = await AgentService.GetAllAgentsAsync();
+        _agentCount = _agents.Count;
+
+        var board = await KanbanService.GetBoardWithColumnsAsync(1);
+        if (board != null)
+        {
+            _cardsDone = board.Columns
+                .Where(c => c.Status == KanbanStatus.Done)
+                .SelectMany(c => c.Cards).Count();
+            _cardsInProgress = board.Columns
+                .Where(c => c.Status == KanbanStatus.InProgress)
+                .SelectMany(c => c.Cards).Count();
+        }
+
+        var messages = await MessageService.GetAllMessagesAsync();
+        _messageCount = messages.Count;
+        _recentMessages = messages.Take(5).ToList();
+
+        _loading = false;
+    }
+
+    private BadgeStyle GetStatusBadgeStyle(AgentStatus status) => status switch
+    {
+        AgentStatus.Working => BadgeStyle.Warning,
+        AgentStatus.Done => BadgeStyle.Success,
+        AgentStatus.Error => BadgeStyle.Danger,
+        AgentStatus.WaitingForInput => BadgeStyle.Info,
+        _ => BadgeStyle.Secondary
+    };
+}

@@ -1,0 +1,187 @@
+@page "/kanban"
+@rendermode InteractiveServer
+@inject IKanbanService KanbanService
+@inject IAgentService AgentService
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>AIDevBuddy - Kanban Board</PageTitle>
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-4" Gap="8px">
+    <RadzenText TextStyle="TextStyle.H4" class="rz-mb-0">
+        <RadzenIcon Icon="view_kanban" class="rz-mr-2" />Kanban Board
+    </RadzenText>
+    @if (_board != null)
+    {
+        <RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="@_board.Title" />
+    }
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" class="rz-ml-auto">
+        <RadzenButton Text="New Card" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@OpenCreateCardDialog" Disabled="@(_board == null)" />
+    </RadzenStack>
+</RadzenStack>
+
+@if (_loading)
+{
+    <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+}
+else if (_board == null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">No Kanban board found.</RadzenAlert>
+}
+else
+{
+    <div style="overflow-x:auto;">
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="min-width: max-content; align-items: flex-start;">
+            @foreach (var column in _board.Columns.OrderBy(c => c.Order))
+            {
+                <div style="width:280px; min-width:280px;">
+                    <RadzenCard class="rz-p-0">
+                        <div class="rz-p-3" style="background: @GetColumnHeaderColor(column.Status); border-radius:4px 4px 0 0;">
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                                <RadzenText TextStyle="TextStyle.Subtitle1" Style="color:white; font-weight:600; margin:0;">@column.Title</RadzenText>
+                                <RadzenBadge Text="@column.Cards.Count.ToString()" BadgeStyle="BadgeStyle.Light" class="rz-ml-auto" />
+                            </RadzenStack>
+                        </div>
+                        <div class="rz-p-2" style="min-height:200px; max-height:600px; overflow-y:auto;">
+                            @foreach (var card in column.Cards.OrderBy(c => c.Order))
+                            {
+                                <RadzenCard class="rz-mb-2 rz-p-3" Style="cursor:pointer;" @onclick="() => OpenEditCardDialog(card)">
+                                    <RadzenStack Gap="4px">
+                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px">
+                                            <RadzenBadge Text="@card.StoryType" BadgeStyle="@GetStoryTypeBadge(card.StoryType)" />
+                                            <RadzenBadge Text="@card.Priority" BadgeStyle="@GetPriorityBadge(card.Priority)" class="rz-ml-auto" />
+                                        </RadzenStack>
+                                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@card.Title</RadzenText>
+                                        @if (!string.IsNullOrEmpty(card.Description))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary rz-mb-0"
+                                                        Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                                @card.Description
+                                            </RadzenText>
+                                        }
+                                        @if (card.AssignedAgent != null)
+                                        {
+                                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px">
+                                                <RadzenIcon Icon="person" Style="font-size:0.9rem;" />
+                                                <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0">@card.AssignedAgent.Name</RadzenText>
+                                            </RadzenStack>
+                                        }
+                                        <RadzenStack Orientation="Orientation.Horizontal" Gap="4px" class="rz-mt-1">
+                                            @foreach (var otherCol in _board.Columns.Where(c => c.Id != column.Id).OrderBy(c => c.Order))
+                                            {
+                                                <RadzenButton Text="@("→ " + otherCol.Title)" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                                              Click="@(async () => await MoveCard(card.Id, otherCol.Id))"
+                                                              @onclick:stopPropagation="true" />
+                                            }
+                                        </RadzenStack>
+                                    </RadzenStack>
+                                </RadzenCard>
+                            }
+                        </div>
+                    </RadzenCard>
+                </div>
+            }
+        </RadzenStack>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private KanbanBoard? _board;
+    private List<Agent> _agents = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBoardAsync();
+        _agents = await AgentService.GetAllAgentsAsync();
+    }
+
+    private async Task LoadBoardAsync()
+    {
+        _loading = true;
+        _board = await KanbanService.GetBoardWithColumnsAsync(1);
+        _loading = false;
+    }
+
+    private async Task OpenCreateCardDialog()
+    {
+        var card = new KanbanCard
+        {
+            ColumnId = _board!.Columns.OrderBy(c => c.Order).First().Id,
+            Priority = "Medium",
+            StoryType = "Story"
+        };
+        var result = await DialogService.OpenAsync<CardDialog>("New Card",
+            new Dictionary<string, object> { { "Card", card }, { "Columns", _board.Columns.ToList() }, { "Agents", _agents } },
+            new DialogOptions { Width = "600px", CloseDialogOnEsc = true });
+        if (result is KanbanCard newCard)
+        {
+            await KanbanService.CreateCardAsync(newCard);
+            await LoadBoardAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Card Created", newCard.Title);
+        }
+    }
+
+    private async Task OpenEditCardDialog(KanbanCard card)
+    {
+        var editCard = new KanbanCard
+        {
+            Id = card.Id,
+            Title = card.Title,
+            Description = card.Description,
+            ColumnId = card.ColumnId,
+            AssignedAgentId = card.AssignedAgentId,
+            Priority = card.Priority,
+            StoryType = card.StoryType,
+            Tags = card.Tags,
+            Order = card.Order
+        };
+        var result = await DialogService.OpenAsync<CardDialog>("Edit Card",
+            new Dictionary<string, object> { { "Card", editCard }, { "Columns", _board!.Columns.ToList() }, { "Agents", _agents }, { "IsEdit", true } },
+            new DialogOptions { Width = "600px", CloseDialogOnEsc = true });
+        if (result is KanbanCard updatedCard)
+        {
+            await KanbanService.UpdateCardAsync(updatedCard);
+            await LoadBoardAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Card Updated", updatedCard.Title);
+        }
+        else if (result is string s && s == "delete")
+        {
+            await KanbanService.DeleteCardAsync(card.Id);
+            await LoadBoardAsync();
+            NotificationService.Notify(NotificationSeverity.Warning, "Card Deleted", card.Title);
+        }
+    }
+
+    private async Task MoveCard(int cardId, int targetColumnId)
+    {
+        await KanbanService.MoveCardAsync(cardId, targetColumnId);
+        await LoadBoardAsync();
+    }
+
+    private string GetColumnHeaderColor(KanbanStatus status) => status switch
+    {
+        KanbanStatus.Backlog => "#607D8B",
+        KanbanStatus.ToDo => "#2196F3",
+        KanbanStatus.InProgress => "#FF9800",
+        KanbanStatus.Review => "#9C27B0",
+        KanbanStatus.Done => "#4CAF50",
+        _ => "#607D8B"
+    };
+
+    private BadgeStyle GetStoryTypeBadge(string? type) => type switch
+    {
+        "Bug" => BadgeStyle.Danger,
+        "Task" => BadgeStyle.Info,
+        "Epic" => BadgeStyle.Warning,
+        _ => BadgeStyle.Primary
+    };
+
+    private BadgeStyle GetPriorityBadge(string? priority) => priority switch
+    {
+        "High" => BadgeStyle.Danger,
+        "Low" => BadgeStyle.Success,
+        "Critical" => BadgeStyle.Danger,
+        _ => BadgeStyle.Secondary
+    };
+}

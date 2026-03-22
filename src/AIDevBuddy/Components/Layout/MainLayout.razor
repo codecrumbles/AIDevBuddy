@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
+<RadzenLayout>
+    <RadzenHeader>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0" class="rz-p-2">
+            <RadzenSidebarToggle Click="@(() => _sidebarExpanded = !_sidebarExpanded)" />
+            <RadzenText TextStyle="TextStyle.H5" class="rz-mb-0 rz-ml-2">
+                <RadzenIcon Icon="smart_toy" class="rz-mr-1" /> AIDevBuddy
+            </RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px" class="rz-ml-auto rz-mr-2">
+                <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="BMAD v1.0" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenHeader>
+
+    <RadzenSidebar @bind-Expanded="@_sidebarExpanded">
+        <RadzenPanelMenu>
+            <RadzenPanelMenuItem Text="Dashboard" Icon="dashboard" Path="/" />
+            <RadzenPanelMenuItem Text="Kanban" Icon="view_kanban" Path="/kanban" />
+            <RadzenPanelMenuItem Text="Agents" Icon="smart_toy" Path="/agents" />
+            <RadzenPanelMenuItem Text="Messages" Icon="chat" Path="/messages" />
+            <RadzenPanelMenuItem Text="Settings" Icon="settings">
+                <RadzenPanelMenuItem Text="LLM Connections" Icon="psychology" Path="/settings/llm" />
+                <RadzenPanelMenuItem Text="App Settings" Icon="tune" Path="/settings/app" />
+            </RadzenPanelMenuItem>
+        </RadzenPanelMenu>
+    </RadzenSidebar>
+
+    <RadzenBody>
+        <div class="rz-p-4">
+            @Body
+        </div>
+    </RadzenBody>
+</RadzenLayout>
+
+@code {
+    private bool _sidebarExpanded = true;
+}

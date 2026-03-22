@@ -1,0 +1,68 @@
+@page "/settings/app"
+@rendermode InteractiveServer
+
+<PageTitle>AIDevBuddy - App Settings</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">
+    <RadzenIcon Icon="tune" class="rz-mr-2" />App Settings
+</RadzenText>
+
+<RadzenCard>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">About AIDevBuddy</RadzenText>
+    <RadzenStack Gap="0.5rem">
+        <RadzenRow>
+            <RadzenColumn Size="4"><RadzenText TextStyle="TextStyle.Body2"><strong>Version:</strong></RadzenText></RadzenColumn>
+            <RadzenColumn Size="8"><RadzenText TextStyle="TextStyle.Body2">1.0.0</RadzenText></RadzenColumn>
+        </RadzenRow>
+        <RadzenRow>
+            <RadzenColumn Size="4"><RadzenText TextStyle="TextStyle.Body2"><strong>Framework:</strong></RadzenText></RadzenColumn>
+            <RadzenColumn Size="8"><RadzenText TextStyle="TextStyle.Body2">.NET 10 Blazor WebApp</RadzenText></RadzenColumn>
+        </RadzenRow>
+        <RadzenRow>
+            <RadzenColumn Size="4"><RadzenText TextStyle="TextStyle.Body2"><strong>Methodology:</strong></RadzenText></RadzenColumn>
+            <RadzenColumn Size="8"><RadzenText TextStyle="TextStyle.Body2">BMAD (Breakthrough Method for Agile AI-Driven Development)</RadzenText></RadzenColumn>
+        </RadzenRow>
+        <RadzenRow>
+            <RadzenColumn Size="4"><RadzenText TextStyle="TextStyle.Body2"><strong>UI Library:</strong></RadzenText></RadzenColumn>
+            <RadzenColumn Size="8"><RadzenText TextStyle="TextStyle.Body2">Radzen Blazor Components</RadzenText></RadzenColumn>
+        </RadzenRow>
+        <RadzenRow>
+            <RadzenColumn Size="4"><RadzenText TextStyle="TextStyle.Body2"><strong>Database:</strong></RadzenText></RadzenColumn>
+            <RadzenColumn Size="8"><RadzenText TextStyle="TextStyle.Body2">SQLite (via Entity Framework Core)</RadzenText></RadzenColumn>
+        </RadzenRow>
+    </RadzenStack>
+</RadzenCard>
+
+<RadzenCard class="rz-mt-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">BMAD Methodology</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3">
+        AIDevBuddy is built on the BMAD (Breakthrough Method for Agile AI-Driven Development) framework.
+        BMAD uses specialized AI agents, each with distinct roles, to guide software development through structured phases.
+    </RadzenText>
+    <RadzenStack Gap="0.5rem">
+        @foreach (var phase in _phases)
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="12px" class="rz-p-2">
+                <RadzenIcon Icon="arrow_right" />
+                <RadzenStack Gap="2px">
+                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@phase.Phase</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0 rz-color-secondary">@phase.Description</RadzenText>
+                </RadzenStack>
+            </RadzenStack>
+        }
+    </RadzenStack>
+</RadzenCard>
+
+@code {
+    private record BmadPhase(string Phase, string Description);
+
+    private List<BmadPhase> _phases = new()
+    {
+        new("Idea & Requirements", "Analyst gathers requirements; Product Manager produces PRD"),
+        new("Planning & Architecture", "Architect maps technical blueprint; Project Manager outlines milestones"),
+        new("Work Breakdown", "Product Owner & Scrum Master create detailed development stories"),
+        new("Development", "Developer implements stories with unit tests"),
+        new("QA & Validation", "QA Agent tests and validates against specifications"),
+        new("Orchestration", "Orchestrator coordinates agents and maintains single source of truth")
+    };
+}
