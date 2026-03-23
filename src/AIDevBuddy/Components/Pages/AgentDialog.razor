@@ -1,0 +1,34 @@
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem">
+    <RadzenFormField Text="Name" Variant="Variant.Outlined">
+        <RadzenTextBox @bind-Value="Agent.Name" Style="width:100%" />
+    </RadzenFormField>
+    <RadzenFormField Text="Role" Variant="Variant.Outlined">
+        <RadzenDropDown @bind-Value="Agent.Role" Data="@_roles" Style="width:100%" />
+    </RadzenFormField>
+    <RadzenFormField Text="Status" Variant="Variant.Outlined">
+        <RadzenDropDown @bind-Value="Agent.Status" Data="@_statuses" Style="width:100%" />
+    </RadzenFormField>
+    <RadzenFormField Text="Description" Variant="Variant.Outlined">
+        <RadzenTextBox @bind-Value="Agent.Description" Style="width:100%" />
+    </RadzenFormField>
+    <RadzenFormField Text="System Prompt" Variant="Variant.Outlined">
+        <RadzenTextArea @bind-Value="Agent.SystemPrompt" Rows="4" Style="width:100%"
+                        Placeholder="Instructions for this AI agent..." />
+    </RadzenFormField>
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" JustifyContent="JustifyContent.End">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Secondary"
+                      Click="@(() => DialogService.Close(null))" />
+        <RadzenButton Text="@(IsEdit ? "Save" : "Create")" Icon="save" ButtonStyle="ButtonStyle.Primary"
+                      Click="@(() => DialogService.Close(Agent))" Disabled="@string.IsNullOrWhiteSpace(Agent.Name)" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public Agent Agent { get; set; } = new();
+    [Parameter] public bool IsEdit { get; set; } = false;
+
+    private AgentRole[] _roles = Enum.GetValues<AgentRole>();
+    private AgentStatus[] _statuses = Enum.GetValues<AgentStatus>();
+}

@@ -1,0 +1,133 @@
+@page "/agents"
+@rendermode InteractiveServer
+@inject IAgentService AgentService
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>AIDevBuddy - Agents</PageTitle>
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-4" Gap="8px">
+    <RadzenText TextStyle="TextStyle.H4" class="rz-mb-0">
+        <RadzenIcon Icon="smart_toy" class="rz-mr-2" />BMAD Agents
+    </RadzenText>
+    <RadzenButton Text="New Agent" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@OpenCreateAgentDialog" class="rz-ml-auto" />
+</RadzenStack>
+
+@if (_loading)
+{
+    <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+}
+else
+{
+    <RadzenDataGrid Data="@_agents" TItem="Agent" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="20"
+                    GridLines="DataGridGridLines.Horizontal" Density="Density.Default">
+        <Columns>
+            <RadzenDataGridColumn TItem="Agent" Property="Name" Title="Name" Width="150px" />
+            <RadzenDataGridColumn TItem="Agent" Property="Role" Title="Role" Width="140px">
+                <Template Context="agent">
+                    <RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="@agent.Role.ToString()" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="Agent" Property="Status" Title="Status" Width="130px">
+                <Template Context="agent">
+                    <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(agent.Status)" Text="@agent.Status.ToString()" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="Agent" Property="Description" Title="Description" />
+            <RadzenDataGridColumn TItem="Agent" Title="Actions" Width="200px" Sortable="false" Filterable="false">
+                <Template Context="agent">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="4px">
+                        <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                      Click="@(() => OpenEditAgentDialog(agent))" />
+                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                      Click="@(() => DeleteAgent(agent))" />
+                        <RadzenDropDown @bind-Value="agent.Status" Data="@_statuses"
+                                        Change="@(async (object v) => await UpdateStatus(agent, (AgentStatus)v))"
+                                        Style="width:110px" />
+                    </RadzenStack>
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private List<Agent> _agents = new();
+    private AgentStatus[] _statuses = Enum.GetValues<AgentStatus>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAgentsAsync();
+    }
+
+    private async Task LoadAgentsAsync()
+    {
+        _loading = true;
+        _agents = await AgentService.GetAllAgentsAsync();
+        _loading = false;
+    }
+
+    private async Task OpenCreateAgentDialog()
+    {
+        var agent = new Agent();
+        var result = await DialogService.OpenAsync<AgentDialog>("New Agent",
+            new Dictionary<string, object> { { "Agent", agent } },
+            new DialogOptions { Width = "500px", CloseDialogOnEsc = true });
+        if (result is Agent newAgent)
+        {
+            await AgentService.CreateAgentAsync(newAgent);
+            await LoadAgentsAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Agent Created", newAgent.Name);
+        }
+    }
+
+    private async Task OpenEditAgentDialog(Agent agent)
+    {
+        var edit = new Agent
+        {
+            Id = agent.Id,
+            Name = agent.Name,
+            Role = agent.Role,
+            Status = agent.Status,
+            Description = agent.Description,
+            SystemPrompt = agent.SystemPrompt
+        };
+        var result = await DialogService.OpenAsync<AgentDialog>("Edit Agent",
+            new Dictionary<string, object> { { "Agent", edit }, { "IsEdit", true } },
+            new DialogOptions { Width = "500px", CloseDialogOnEsc = true });
+        if (result is Agent updatedAgent)
+        {
+            await AgentService.UpdateAgentAsync(updatedAgent);
+            await LoadAgentsAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Agent Updated", updatedAgent.Name);
+        }
+    }
+
+    private async Task DeleteAgent(Agent agent)
+    {
+        var confirmed = await DialogService.Confirm($"Delete agent '{agent.Name}'?", "Confirm Delete",
+            new ConfirmOptions { OkButtonText = "Delete", CancelButtonText = "Cancel" });
+        if (confirmed == true)
+        {
+            await AgentService.DeleteAgentAsync(agent.Id);
+            await LoadAgentsAsync();
+            NotificationService.Notify(NotificationSeverity.Warning, "Agent Deleted", agent.Name);
+        }
+    }
+
+    private async Task UpdateStatus(Agent agent, AgentStatus status)
+    {
+        await AgentService.UpdateAgentStatusAsync(agent.Id, status);
+        await LoadAgentsAsync();
+    }
+
+    private BadgeStyle GetStatusBadgeStyle(AgentStatus status) => status switch
+    {
+        AgentStatus.Working => BadgeStyle.Warning,
+        AgentStatus.Done => BadgeStyle.Success,
+        AgentStatus.Error => BadgeStyle.Danger,
+        AgentStatus.WaitingForInput => BadgeStyle.Info,
+        _ => BadgeStyle.Secondary
+    };
+}

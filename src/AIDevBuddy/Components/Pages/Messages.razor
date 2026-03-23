@@ -1,0 +1,197 @@
+@page "/messages"
+@rendermode InteractiveServer
+@inject IMessageService MessageService
+@inject IAgentService AgentService
+@inject NotificationService NotificationService
+
+<PageTitle>AIDevBuddy - Messages</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">
+    <RadzenIcon Icon="chat" class="rz-mr-2" />Agent Messages
+</RadzenText>
+
+@if (_loading)
+{
+    <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+}
+else
+{
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="8">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Send Message</RadzenText>
+                <RadzenStack Gap="0.75rem">
+                    <RadzenRow Gap="0.5rem">
+                        <RadzenColumn Size="6">
+                            <RadzenFormField Text="From" Variant="Variant.Outlined" Style="width:100%">
+                                <RadzenDropDown @bind-Value="_senderId" Data="@_agents"
+                                                TextProperty="Name" ValueProperty="Id"
+                                                AllowClear="true" Placeholder="System"
+                                                Style="width:100%" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                        <RadzenColumn Size="6">
+                            <RadzenFormField Text="To" Variant="Variant.Outlined" Style="width:100%">
+                                <RadzenDropDown @bind-Value="_receiverId" Data="@_agents"
+                                                TextProperty="Name" ValueProperty="Id"
+                                                AllowClear="true" Placeholder="Broadcast"
+                                                Style="width:100%" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                    </RadzenRow>
+                    <RadzenRow Gap="0.5rem">
+                        <RadzenColumn Size="4">
+                            <RadzenFormField Text="Type" Variant="Variant.Outlined" Style="width:100%">
+                                <RadzenDropDown @bind-Value="_messageType"
+                                                Data="@(new[] { "Chat", "Handoff", "Request", "Response", "Broadcast", "Alert" })"
+                                                Style="width:100%" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                        <RadzenColumn Size="8">
+                            <RadzenFormField Text="Message" Variant="Variant.Outlined" Style="width:100%">
+                                <RadzenTextArea @bind-Value="_newMessage" Rows="2" Style="width:100%"
+                                                Placeholder="Enter your message..." />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                    </RadzenRow>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px">
+                        <RadzenCheckBox @bind-Value="_isBroadcast" Name="broadcast" />
+                        <RadzenLabel Text="Broadcast to all agents" Component="broadcast" />
+                        <RadzenButton Text="Send" Icon="send" ButtonStyle="ButtonStyle.Primary"
+                                      Click="@SendMessage" Disabled="@string.IsNullOrWhiteSpace(_newMessage)"
+                                      class="rz-ml-auto" />
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenCard>
+
+            <RadzenCard class="rz-mt-4">
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-3" Gap="8px">
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">All Messages</RadzenText>
+                    <RadzenBadge Text="@_messages.Count.ToString()" BadgeStyle="BadgeStyle.Secondary" />
+                </RadzenStack>
+                @if (_messages.Any())
+                {
+                    <RadzenStack Gap="8px" Style="max-height:400px; overflow-y:auto;">
+                        @foreach (var msg in _messages)
+                        {
+                            <RadzenCard class="@($"rz-p-3 {(msg.IsRead ? string.Empty : "rz-background-color-info-light")}")">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="12px">
+                                    <RadzenStack Gap="4px" Style="flex:1">
+                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                                            <RadzenIcon Icon="@(msg.IsBroadcast ? "campaign" : "message")" />
+                                            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">
+                                                @(msg.Sender?.Name ?? "System") → @(msg.IsBroadcast ? "All Agents" : (msg.Receiver?.Name ?? "?"))
+                                            </RadzenText>
+                                            <RadzenBadge Text="@msg.MessageType" BadgeStyle="BadgeStyle.Primary" />
+                                            @if (!msg.IsRead)
+                                            {
+                                                <RadzenBadge Text="Unread" BadgeStyle="BadgeStyle.Info" />
+                                            }
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-ml-auto rz-color-secondary">
+                                                @msg.SentAt.ToLocalTime().ToString("g")
+                                            </RadzenText>
+                                        </RadzenStack>
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0">@msg.Content</RadzenText>
+                                    </RadzenStack>
+                                    @if (!msg.IsRead)
+                                    {
+                                        <RadzenButton Icon="done" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light"
+                                                      Click="@(async () => await MarkRead(msg.Id))" />
+                                    }
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+                    </RadzenStack>
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary">No messages yet.</RadzenText>
+                }
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="4">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Agents</RadzenText>
+                <RadzenStack Gap="8px">
+                    @foreach (var agent in _agents)
+                    {
+                        <RadzenCard class="rz-p-2" @onclick="@(() => FilterByAgent(agent.Id))" Style="cursor:pointer;">
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                                <RadzenIcon Icon="smart_toy" />
+                                <RadzenStack Gap="2px" Style="flex:1">
+                                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@agent.Name</RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">@agent.Role</RadzenText>
+                                </RadzenStack>
+                                <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(agent.Status)" Text="@agent.Status.ToString()" />
+                            </RadzenStack>
+                        </RadzenCard>
+                    }
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+}
+
+@code {
+    private bool _loading = true;
+    private List<AgentMessage> _messages = new();
+    private List<Agent> _agents = new();
+    private string _newMessage = string.Empty;
+    private int? _senderId;
+    private int? _receiverId;
+    private string _messageType = "Chat";
+    private bool _isBroadcast = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _agents = await AgentService.GetAllAgentsAsync();
+        _messages = await MessageService.GetAllMessagesAsync();
+        _loading = false;
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_newMessage)) return;
+        var msg = new AgentMessage
+        {
+            Content = _newMessage,
+            SenderId = _senderId,
+            ReceiverId = _isBroadcast ? null : _receiverId,
+            MessageType = _messageType,
+            IsBroadcast = _isBroadcast
+        };
+        await MessageService.SendMessageAsync(msg);
+        _newMessage = string.Empty;
+        _isBroadcast = false;
+        await LoadAsync();
+        NotificationService.Notify(NotificationSeverity.Success, "Message Sent");
+    }
+
+    private async Task MarkRead(int messageId)
+    {
+        await MessageService.MarkAsReadAsync(messageId);
+        await LoadAsync();
+    }
+
+    private async Task FilterByAgent(int agentId)
+    {
+        _loading = true;
+        _messages = await MessageService.GetMessagesForAgentAsync(agentId);
+        _loading = false;
+    }
+
+    private BadgeStyle GetStatusBadgeStyle(AgentStatus status) => status switch
+    {
+        AgentStatus.Working => BadgeStyle.Warning,
+        AgentStatus.Done => BadgeStyle.Success,
+        AgentStatus.Error => BadgeStyle.Danger,
+        AgentStatus.WaitingForInput => BadgeStyle.Info,
+        _ => BadgeStyle.Secondary
+    };
+}

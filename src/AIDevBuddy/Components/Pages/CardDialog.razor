@@ -1,0 +1,62 @@
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem">
+    <RadzenFormField Text="Title" Variant="Variant.Outlined">
+        <RadzenTextBox @bind-Value="Card.Title" Style="width:100%" />
+    </RadzenFormField>
+    <RadzenFormField Text="Description" Variant="Variant.Outlined">
+        <RadzenTextArea @bind-Value="Card.Description" Rows="3" Style="width:100%" />
+    </RadzenFormField>
+    <RadzenRow Gap="0.5rem">
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Column" Variant="Variant.Outlined">
+                <RadzenDropDown @bind-Value="Card.ColumnId" Data="@Columns"
+                                TextProperty="Title" ValueProperty="Id" Style="width:100%" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Assigned Agent" Variant="Variant.Outlined">
+                <RadzenDropDown @bind-Value="Card.AssignedAgentId" Data="@Agents"
+                                TextProperty="Name" ValueProperty="Id"
+                                AllowClear="true" Style="width:100%" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow Gap="0.5rem">
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Story Type" Variant="Variant.Outlined">
+                <RadzenDropDown @bind-Value="Card.StoryType"
+                                Data="@(new[] { "Story", "Task", "Bug", "Epic" })"
+                                Style="width:100%" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Priority" Variant="Variant.Outlined">
+                <RadzenDropDown @bind-Value="Card.Priority"
+                                Data="@(new[] { "Low", "Medium", "High", "Critical" })"
+                                Style="width:100%" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenFormField Text="Tags (comma-separated)" Variant="Variant.Outlined">
+        <RadzenTextBox @bind-Value="Card.Tags" Style="width:100%" />
+    </RadzenFormField>
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" JustifyContent="JustifyContent.End">
+        @if (IsEdit)
+        {
+            <RadzenButton Text="Delete" Icon="delete" ButtonStyle="ButtonStyle.Danger"
+                          Click="@(() => DialogService.Close("delete"))" />
+        }
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Secondary"
+                      Click="@(() => DialogService.Close(null))" />
+        <RadzenButton Text="@(IsEdit ? "Save" : "Create")" Icon="save" ButtonStyle="ButtonStyle.Primary"
+                      Click="@(() => DialogService.Close(Card))" Disabled="@string.IsNullOrWhiteSpace(Card.Title)" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public KanbanCard Card { get; set; } = new();
+    [Parameter] public List<KanbanColumn> Columns { get; set; } = new();
+    [Parameter] public List<Agent> Agents { get; set; } = new();
+    [Parameter] public bool IsEdit { get; set; } = false;
+}
