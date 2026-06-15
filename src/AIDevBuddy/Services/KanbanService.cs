@@ -25,6 +25,9 @@ public class KanbanService : IKanbanService
             .Include(b => b.Columns.OrderBy(c => c.Order))
                 .ThenInclude(c => c.Cards.OrderBy(k => k.Order))
                     .ThenInclude(k => k.AssignedAgent)
+            .Include(b => b.Columns)
+                .ThenInclude(c => c.Cards)
+                    .ThenInclude(k => k.Project)
             .FirstOrDefaultAsync(b => b.Id == boardId);
     }
 

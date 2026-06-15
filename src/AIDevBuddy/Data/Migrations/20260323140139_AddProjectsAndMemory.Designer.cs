@@ -3,6 +3,7 @@ using System;
 using AIDevBuddy.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIDevBuddy.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260323140139_AddProjectsAndMemory")]
+    partial class AddProjectsAndMemory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.5");
@@ -22,10 +25,6 @@ namespace AIDevBuddy.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("BmadPhase")
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
@@ -39,14 +38,6 @@ namespace AIDevBuddy.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("PersonaName")
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PreferredModel")
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
                     b.Property<int>("Role")
                         .HasColumnType("INTEGER");
 
@@ -54,10 +45,6 @@ namespace AIDevBuddy.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("SystemPrompt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TriggerCodes")
-                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -71,127 +58,81 @@ namespace AIDevBuddy.Data.Migrations
                         new
                         {
                             Id = 1,
-                            BmadPhase = "Analysis",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Strategic Business Analyst — market research, requirements translation, product briefs.",
-                            Name = "Mary (Analyst)",
-                            PersonaName = "Mary",
+                            Description = "Gathers requirements and produces initial briefs",
+                            Name = "Analyst",
                             Role = 0,
                             Status = 0,
-                            SystemPrompt = "You are Mary, a Strategic Business Analyst for the BMAD framework. You approach requirements gathering with the excitement of a treasure hunter. Trigger codes: BP (Brainstorming), MR (Market Research), DR (Domain Research), TR (Technical Research), CB (Create Product Brief), DP (Document Project). Always load project-context.md if available. Output artifacts to planning-artifacts/.",
-                            TriggerCodes = "BP,MR,DR,TR,CB,DP",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 2,
-                            BmadPhase = "Analysis",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Technical Documentation Specialist — CommonMark, DITA, OpenAPI, Mermaid diagrams.",
-                            Name = "Paige (Tech Writer)",
-                            PersonaName = "Paige",
+                            Description = "Produces PRDs and feature specifications",
+                            Name = "Product Manager",
                             Role = 1,
                             Status = 0,
-                            SystemPrompt = "You are Paige, a Technical Documentation Specialist for the BMAD framework. You explain complex concepts by 'teaching a friend' — accessible, precise, structured. You produce clear, well-structured documentation using CommonMark. Trigger codes: WD (Write Docs), ID (Index Docs). Always load project-context.md if available.",
-                            TriggerCodes = "WD,ID",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 3,
-                            BmadPhase = "Planning",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Product Manager — PRDs, feature specs, epics & stories, relentless 'WHY?' questioning.",
-                            Name = "John (PM)",
-                            PersonaName = "John",
+                            Description = "Maps technical blueprints and architecture",
+                            Name = "Architect",
                             Role = 2,
                             Status = 0,
-                            SystemPrompt = "You are John, a Product Manager for the BMAD framework with 8+ years B2B/consumer experience. You are relentlessly curious — always asking 'WHY?' before prescribing solutions. You are MVP-focused and anti-perfectionist. Trigger codes: CP (Create PRD), VP (Validate PRD), EP (Edit PRD), CE (Create Epics & Stories), IR (Implementation Readiness), CC (Correct Course). Output PRD.md to planning-artifacts/. Always load project-context.md.",
-                            TriggerCodes = "CP,VP,EP,CE,IR,CC",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 4,
-                            BmadPhase = "Planning",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Senior UX Designer — human-centered design, storytelling, data-grounded UX specs.",
-                            Name = "Sally (UX Designer)",
-                            PersonaName = "Sally",
+                            Description = "Refines specs and manages backlog",
+                            Name = "Product Owner",
                             Role = 3,
                             Status = 0,
-                            SystemPrompt = "You are Sally, a Senior UX Designer for the BMAD framework with 7+ years experience. You use storytelling to surface user pain points. You are human-centered and data-grounded. Trigger codes: CU (Create UX Design). Reads PRD.md to produce ux-spec.md in planning-artifacts/. Always load project-context.md.",
-                            TriggerCodes = "CU",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 5,
-                            BmadPhase = "Solutioning",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "System Architect — distributed systems, cloud, API design, ADRs, implementation readiness gate.",
-                            Name = "Winston (Architect)",
-                            PersonaName = "Winston",
+                            Description = "Translates specs to development stories",
+                            Name = "Scrum Master",
                             Role = 4,
                             Status = 0,
-                            SystemPrompt = "You are Winston, a System Architect for the BMAD framework. You specialize in distributed systems, cloud architecture, and API design. You balance aspiration with pragmatism. You document all decisions as ADRs. Trigger codes: CA (Create Architecture), IR (Implementation Readiness check). Reads PRD.md + ux-spec.md to produce architecture.md in planning-artifacts/. The Implementation Readiness check is the gate before development begins. Always load project-context.md.",
-                            TriggerCodes = "CA,IR",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 6,
-                            BmadPhase = "Implementation",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Technical Scrum Master — sprint planning, story creation, retrospectives, servant leader.",
-                            Name = "Bob (SM)",
-                            PersonaName = "Bob",
+                            Description = "Implements stories and writes code",
+                            Name = "Developer",
                             Role = 5,
                             Status = 0,
-                            SystemPrompt = "You are Bob, a Technical Scrum Master for the BMAD framework. You are crisp and checklist-driven. You are a servant leader who removes blockers. Trigger codes: SP (Sprint Planning), CS (Create Story), ER (Epic Retrospective), CC (Correct Course). Reads architecture.md + epics to produce story-[slug].md files in implementation-artifacts/. Stories start with status: ready-for-dev. Always load project-context.md.",
-                            TriggerCodes = "SP,CS,ER,CC",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 7,
-                            BmadPhase = "Implementation",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Senior Software Engineer — TDD, ultra-precise, speaks in file paths and acceptance criteria IDs.",
-                            Name = "Amelia (Dev)",
-                            PersonaName = "Amelia",
+                            Description = "Tests and validates implementations",
+                            Name = "QA Engineer",
                             Role = 6,
                             Status = 0,
-                            SystemPrompt = "You are Amelia, a Senior Software Engineer for the BMAD framework. You are ultra-precise and speak in file paths and AC IDs. You follow strict TDD discipline — tests before code. No fluff, no padding. Trigger codes: DS (Dev Story — write tests + code), CR (Code Review). Reads story-[slug].md from implementation-artifacts/. Sets story status: in-progress → review when complete. Always load project-context.md.",
-                            TriggerCodes = "DS,CR",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 8,
-                            BmadPhase = "Implementation",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "QA Engineer — API and E2E test automation, adversarial review, edge case hunting.",
-                            Name = "Quinn (QA)",
-                            PersonaName = "Quinn",
+                            Description = "Coordinates multi-agent interactions",
+                            Name = "Orchestrator",
                             Role = 7,
                             Status = 0,
-                            SystemPrompt = "You are Quinn, a QA Engineer for the BMAD framework. You have a 'ship-it-and-iterate' mentality balanced with quality gates. You run three parallel review layers: Blind Hunter (quality gaps), Edge Case Hunter (exhaustive path analysis), Acceptance Auditor (AC compliance). Trigger codes: QA (Generate E2E tests). Always load project-context.md.",
-                            TriggerCodes = "QA",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 9,
-                            BmadPhase = "All",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Elite Full-Stack Dev — solo quick-flow track: clarify → plan → implement → review in one agent.",
-                            Name = "Barry (Quick Flow)",
-                            PersonaName = "Barry",
-                            Role = 8,
-                            Status = 0,
-                            SystemPrompt = "You are Barry, an Elite Full-Stack Developer for the BMAD quick-flow track. You handle the entire solo dev workflow in one session: clarify requirements → plan → implement → self-review → present. Trigger codes: QF (Quick Flow). Produces spec-*.md + code. Best for small, well-understood work items. Always load project-context.md if available.",
-                            TriggerCodes = "QF",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
@@ -310,7 +251,7 @@ namespace AIDevBuddy.Data.Migrations
                         {
                             Id = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "AI-driven development sprint board — stories flow: Backlog → Ready for Dev → In Progress → In Review → Done",
+                            Description = "AI-driven development sprint board following the BMAD methodology",
                             Title = "BMAD Sprint Board"
                         });
                 });
@@ -320,9 +261,6 @@ namespace AIDevBuddy.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("AcceptanceCriteria")
-                        .HasColumnType("TEXT");
 
                     b.Property<int?>("AssignedAgentId")
                         .HasColumnType("INTEGER");
@@ -414,7 +352,7 @@ namespace AIDevBuddy.Data.Migrations
                             BoardId = 1,
                             Order = 1,
                             Status = 1,
-                            Title = "Ready for Dev"
+                            Title = "To Do"
                         },
                         new
                         {
@@ -430,7 +368,7 @@ namespace AIDevBuddy.Data.Migrations
                             BoardId = 1,
                             Order = 3,
                             Status = 3,
-                            Title = "In Review"
+                            Title = "Review"
                         },
                         new
                         {
@@ -506,14 +444,14 @@ namespace AIDevBuddy.Data.Migrations
                             Endpoint = "https://api.anthropic.com/v1/",
                             IsDefault = false,
                             IsEnabled = false,
-                            ModelName = "claude-sonnet-4-6",
+                            ModelName = "claude-3-5-sonnet-20241022",
                             Provider = 2,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 4,
-                            Endpoint = "http://localhost:11434",
+                            Endpoint = "http://localhost:11434/api/",
                             IsDefault = false,
                             IsEnabled = false,
                             ModelName = "llama3",
@@ -527,22 +465,6 @@ namespace AIDevBuddy.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<bool>("AutoLoop")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("AutoLoopIntervalSeconds")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("AutoLoopStatus")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BmadPhase")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");

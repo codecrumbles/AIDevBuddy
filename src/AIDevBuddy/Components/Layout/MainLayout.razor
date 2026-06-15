@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
 @inject NavigationManager NavigationManager
+@inject Radzen.ThemeService ThemeService
+@implements IDisposable
 
 <RadzenLayout>
     <RadzenHeader>
@@ -17,6 +19,7 @@
     <RadzenSidebar @bind-Expanded="@_sidebarExpanded">
         <RadzenPanelMenu>
             <RadzenPanelMenuItem Text="Dashboard" Icon="dashboard" Path="/" />
+            <RadzenPanelMenuItem Text="Projects" Icon="folder_open" Path="/projects" />
             <RadzenPanelMenuItem Text="Kanban" Icon="view_kanban" Path="/kanban" />
             <RadzenPanelMenuItem Text="Agents" Icon="smart_toy" Path="/agents" />
             <RadzenPanelMenuItem Text="Messages" Icon="chat" Path="/messages" />
@@ -34,6 +37,23 @@
     </RadzenBody>
 </RadzenLayout>
 
+<RadzenComponents />
+
 @code {
     private bool _sidebarExpanded = true;
+
+    protected override void OnInitialized()
+    {
+        ThemeService.ThemeChanged += OnThemeChanged;
+    }
+
+    private void OnThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ThemeService.ThemeChanged -= OnThemeChanged;
+    }
 }

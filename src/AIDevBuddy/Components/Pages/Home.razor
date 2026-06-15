@@ -3,12 +3,21 @@
 @inject IAgentService AgentService
 @inject IKanbanService KanbanService
 @inject IMessageService MessageService
+@inject IProjectService ProjectService
+@inject IAgentService AgentSvc
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject NavigationManager Nav
 
 <PageTitle>AIDevBuddy - Dashboard</PageTitle>
 
-<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">
-    <RadzenIcon Icon="dashboard" class="rz-mr-2" />Dashboard
-</RadzenText>
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-4" Gap="8px">
+    <RadzenText TextStyle="TextStyle.H4" class="rz-mb-0">
+        <RadzenIcon Icon="dashboard" class="rz-mr-2" />Dashboard
+    </RadzenText>
+    <RadzenButton Text="New Project" Icon="add" ButtonStyle="ButtonStyle.Primary"
+                  Click="@OpenCreateProjectDialog" class="rz-ml-auto" />
+</RadzenStack>
 
 @if (_loading)
 {
@@ -29,9 +38,9 @@ else
         <RadzenColumn Size="3">
             <RadzenCard class="rz-background-color-success-light rz-color-success">
                 <RadzenStack Gap="8px">
-                    <RadzenIcon Icon="task_alt" Style="font-size:2rem" />
-                    <RadzenText TextStyle="TextStyle.H3" class="rz-mb-0">@_cardsDone</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Body2">Cards Done</RadzenText>
+                    <RadzenIcon Icon="folder_open" Style="font-size:2rem" />
+                    <RadzenText TextStyle="TextStyle.H3" class="rz-mb-0">@_projectCount</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2">Projects</RadzenText>
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
@@ -51,6 +60,59 @@ else
                     <RadzenText TextStyle="TextStyle.H3" class="rz-mb-0">@_messageCount</RadzenText>
                     <RadzenText TextStyle="TextStyle.Body2">Messages</RadzenText>
                 </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        <RadzenColumn Size="12">
+            <RadzenCard>
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-3" Gap="8px">
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">
+                        <RadzenIcon Icon="folder_open" class="rz-mr-1" />Active Projects
+                    </RadzenText>
+                    <RadzenButton Text="All Projects" Icon="arrow_forward" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  class="rz-ml-auto" Click="@(() => Nav.NavigateTo("/projects"))" />
+                </RadzenStack>
+                @if (_recentProjects.Any())
+                {
+                    <RadzenRow Gap="0.75rem">
+                        @foreach (var project in _recentProjects)
+                        {
+                            <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
+                                <RadzenCard class="rz-p-3" Style="cursor:pointer;" @onclick="@(() => Nav.NavigateTo("/projects"))">
+                                    <RadzenStack Gap="4px">
+                                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@project.Name</RadzenText>
+                                        <RadzenBadge Text="@project.Status" BadgeStyle="@GetStatusBadge(project.Status)" />
+                                        @if (project.LeadAgent != null)
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                                                Led by @project.LeadAgent.Name
+                                            </RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </RadzenCard>
+                            </RadzenColumn>
+                        }
+                        <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
+                            <RadzenCard class="rz-p-3 rz-background-color-base-200" Style="cursor:pointer; border: 2px dashed var(--rz-base-400);"
+                                        @onclick="OpenCreateProjectDialog">
+                                <RadzenStack AlignItems="AlignItems.Center" Gap="4px" class="rz-p-2">
+                                    <RadzenIcon Icon="add_circle_outline" Style="font-size:1.5rem; color:var(--rz-secondary)" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">New Project</RadzenText>
+                                </RadzenStack>
+                            </RadzenCard>
+                        </RadzenColumn>
+                    </RadzenRow>
+                }
+                else
+                {
+                    <RadzenStack AlignItems="AlignItems.Center" Gap="0.75rem" class="rz-p-3">
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary">No projects yet. Start your first BMAD project!</RadzenText>
+                        <RadzenButton Text="Create Project" Icon="add" ButtonStyle="ButtonStyle.Primary"
+                                      Click="@OpenCreateProjectDialog" />
+                    </RadzenStack>
+                }
             </RadzenCard>
         </RadzenColumn>
     </RadzenRow>
@@ -82,17 +144,24 @@ else
                 </RadzenText>
                 @if (_recentMessages.Any())
                 {
-                    <RadzenStack Gap="8px">
+                    <RadzenStack Gap="8px" Style="max-height:280px;overflow-y:auto">
                         @foreach (var msg in _recentMessages)
                         {
                             <RadzenCard class="rz-p-2">
                                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="8px">
-                                    <RadzenIcon Icon="@(msg.IsBroadcast ? "campaign" : "message")" Style="font-size:1.2rem" />
-                                    <RadzenStack Gap="2px">
-                                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">
-                                            @(msg.Sender?.Name ?? "System") → @(msg.IsBroadcast ? "All" : (msg.Receiver?.Name ?? "?"))
-                                        </RadzenText>
-                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;">
+                                    <RadzenIcon Icon="@GetMessageIcon(msg.MessageType)" Style="font-size:1.2rem" />
+                                    <RadzenStack Gap="2px" Style="flex:1;min-width:0">
+                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px">
+                                            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">
+                                                @(msg.Sender?.Name ?? "System") → @(msg.IsBroadcast ? "All" : (msg.Receiver?.Name ?? "?"))
+                                            </RadzenText>
+                                            @if (!string.IsNullOrEmpty(msg.MessageType) && msg.MessageType != "Chat")
+                                            {
+                                                <RadzenBadge Text="@msg.MessageType" BadgeStyle="@GetMessageTypeBadge(msg.MessageType)" />
+                                            }
+                                        </RadzenStack>
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0"
+                                                    Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                             @msg.Content
                                         </RadzenText>
                                         <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
@@ -117,7 +186,9 @@ else
     private bool _loading = true;
     private List<Agent> _agents = new();
     private List<AgentMessage> _recentMessages = new();
+    private List<Project> _recentProjects = new();
     private int _agentCount;
+    private int _projectCount;
     private int _cardsDone;
     private int _cardsInProgress;
     private int _messageCount;
@@ -142,8 +213,37 @@ else
         _messageCount = messages.Count;
         _recentMessages = messages.Take(5).ToList();
 
+        var allProjects = await ProjectService.GetAllProjectsAsync();
+        _projectCount = allProjects.Count;
+        _recentProjects = allProjects.Take(3).ToList();
+
         _loading = false;
     }
+
+    private async Task OpenCreateProjectDialog()
+    {
+        var allAgents = await AgentSvc.GetAllAgentsAsync();
+        var project = new Project();
+        var result = await DialogService.OpenAsync<ProjectDialog>("New Project",
+            new Dictionary<string, object> { { "Project", project }, { "AllAgents", allAgents } },
+            new DialogOptions { Width = "600px", CloseDialogOnEsc = true });
+
+        if (result is ValueTuple<Project, List<int>> tuple)
+        {
+            await ProjectService.CreateProjectAsync(tuple.Item1, tuple.Item2);
+            NotificationService.Notify(NotificationSeverity.Success, "Project Created", tuple.Item1.Name);
+            Nav.NavigateTo("/projects");
+        }
+    }
+
+    private BadgeStyle GetStatusBadge(string status) => status switch
+    {
+        "Active" => BadgeStyle.Success,
+        "Review" => BadgeStyle.Warning,
+        "Complete" => BadgeStyle.Info,
+        "On Hold" => BadgeStyle.Danger,
+        _ => BadgeStyle.Secondary
+    };
 
     private BadgeStyle GetStatusBadgeStyle(AgentStatus status) => status switch
     {
@@ -152,5 +252,23 @@ else
         AgentStatus.Error => BadgeStyle.Danger,
         AgentStatus.WaitingForInput => BadgeStyle.Info,
         _ => BadgeStyle.Secondary
+    };
+
+    private string GetMessageIcon(string? type) => type switch
+    {
+        "ProjectStart" => "rocket_launch",
+        "Handoff" => "swap_horiz",
+        "MemoryUpdate" => "memory",
+        "Alert" => "warning",
+        _ => "message"
+    };
+
+    private BadgeStyle GetMessageTypeBadge(string? type) => type switch
+    {
+        "ProjectStart" => BadgeStyle.Success,
+        "Handoff" => BadgeStyle.Warning,
+        "MemoryUpdate" => BadgeStyle.Info,
+        "Alert" => BadgeStyle.Danger,
+        _ => BadgeStyle.Primary
     };
 }

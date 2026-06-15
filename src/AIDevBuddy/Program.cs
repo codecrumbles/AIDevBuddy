@@ -20,10 +20,25 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
 // Application services
+builder.Services.AddScoped<IOllamaService, OllamaService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IKanbanService, KanbanService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<ILlmSettingsService, LlmSettingsService>();
+builder.Services.AddScoped<IProjectService, ProjectService>();
+builder.Services.AddScoped<IMemoryService, MemoryService>();
+
+// LLM router — scoped; routes to whichever provider is active
+builder.Services.AddSingleton<ICopilotService, CopilotService>();
+builder.Services.AddScoped<ILlmChatService, LlmChatService>();
+
+// Workspace: singleton — manages on-disk project folders
+builder.Services.AddSingleton<IWorkspaceService, WorkspaceService>();
+
+// AutoLoop: singleton so background loops survive Blazor component disposal
+builder.Services.AddSingleton<AutoLoopService>();
+builder.Services.AddSingleton<IAutoLoopService>(sp => sp.GetRequiredService<AutoLoopService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AutoLoopService>());
 
 var app = builder.Build();
 

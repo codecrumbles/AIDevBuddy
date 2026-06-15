@@ -2,7 +2,11 @@
 @rendermode InteractiveServer
 @inject IMessageService MessageService
 @inject IAgentService AgentService
+@inject IProjectService ProjectService
+@inject IMemoryService MemoryService
+@inject IAutoLoopService AutoLoopService
 @inject NotificationService NotificationService
+@implements IDisposable
 
 <PageTitle>AIDevBuddy - Messages</PageTitle>
 
@@ -43,18 +47,34 @@ else
                         <RadzenColumn Size="4">
                             <RadzenFormField Text="Type" Variant="Variant.Outlined" Style="width:100%">
                                 <RadzenDropDown @bind-Value="_messageType"
-                                                Data="@(new[] { "Chat", "Handoff", "Request", "Response", "Broadcast", "Alert" })"
+                                                Data="@(new[] { "Chat", "Handoff", "Request", "Response", "Broadcast", "Alert", "MemoryUpdate", "AutoLoop" })"
                                                 Style="width:100%" />
                             </RadzenFormField>
                         </RadzenColumn>
-                        <RadzenColumn Size="8">
+                        <RadzenColumn Size="4">
+                            <RadzenFormField Text="Project (optional)" Variant="Variant.Outlined" Style="width:100%">
+                                <RadzenDropDown @bind-Value="_projectId" Data="@_projects"
+                                                TextProperty="Name" ValueProperty="Id"
+                                                AllowClear="true" Placeholder="No project"
+                                                Style="width:100%" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                        <RadzenColumn Size="4">
+                            <RadzenFormField Text="Memory Key (optional)" Variant="Variant.Outlined" Style="width:100%">
+                                <RadzenTextBox @bind-Value="_memoryKey" Style="width:100%"
+                                               Placeholder="e.g. project.status" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                    </RadzenRow>
+                    <RadzenRow Gap="0.5rem">
+                        <RadzenColumn Size="12">
                             <RadzenFormField Text="Message" Variant="Variant.Outlined" Style="width:100%">
-                                <RadzenTextArea @bind-Value="_newMessage" Rows="2" Style="width:100%"
+                                <RadzenTextArea @bind-Value="_newMessage" Rows="3" Style="width:100%"
                                                 Placeholder="Enter your message..." />
                             </RadzenFormField>
                         </RadzenColumn>
                     </RadzenRow>
-                    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" AlignItems="AlignItems.Center">
                         <RadzenCheckBox @bind-Value="_isBroadcast" Name="broadcast" />
                         <RadzenLabel Text="Broadcast to all agents" Component="broadcast" />
                         <RadzenButton Text="Send" Icon="send" ButtonStyle="ButtonStyle.Primary"
@@ -68,21 +88,34 @@ else
                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-3" Gap="8px">
                     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">All Messages</RadzenText>
                     <RadzenBadge Text="@_messages.Count.ToString()" BadgeStyle="BadgeStyle.Secondary" />
+                    @if (_filterAgentId.HasValue || _filterProjectId.HasValue)
+                    {
+                        <RadzenButton Text="Clear Filter" Icon="clear" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                      Click="@ClearFilter" />
+                    }
                 </RadzenStack>
                 @if (_messages.Any())
                 {
-                    <RadzenStack Gap="8px" Style="max-height:400px; overflow-y:auto;">
+                    <RadzenStack Gap="8px" Style="max-height:500px; overflow-y:auto;">
                         @foreach (var msg in _messages)
                         {
-                            <RadzenCard class="@($"rz-p-3 {(msg.IsRead ? string.Empty : "rz-background-color-info-light")}")">
+                            <RadzenCard class="@($"rz-p-3 {GetMessageCardClass(msg)}")">
                                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="12px">
-                                    <RadzenStack Gap="4px" Style="flex:1">
-                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
-                                            <RadzenIcon Icon="@(msg.IsBroadcast ? "campaign" : "message")" />
+                                    <RadzenIcon Icon="@GetMessageIcon(msg.MessageType)" Style="font-size:1.4rem;margin-top:2px" />
+                                    <RadzenStack Gap="4px" Style="flex:1;min-width:0">
+                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px" Style="flex-wrap:wrap">
                                             <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">
                                                 @(msg.Sender?.Name ?? "System") → @(msg.IsBroadcast ? "All Agents" : (msg.Receiver?.Name ?? "?"))
                                             </RadzenText>
-                                            <RadzenBadge Text="@msg.MessageType" BadgeStyle="BadgeStyle.Primary" />
+                                            <RadzenBadge Text="@(msg.MessageType ?? "Chat")" BadgeStyle="@GetMessageTypeBadge(msg.MessageType)" />
+                                            @if (msg.Project != null)
+                                            {
+                                                <RadzenBadge Text="@msg.Project.Name" BadgeStyle="BadgeStyle.Info" />
+                                            }
+                                            @if (!string.IsNullOrEmpty(msg.MemoryKey))
+                                            {
+                                                <RadzenBadge Text="@($"mem:{msg.MemoryKey}")" BadgeStyle="BadgeStyle.Warning" />
+                                            }
                                             @if (!msg.IsRead)
                                             {
                                                 <RadzenBadge Text="Unread" BadgeStyle="BadgeStyle.Info" />
@@ -109,17 +142,68 @@ else
                 }
             </RadzenCard>
         </RadzenColumn>
+
         <RadzenColumn Size="4">
+            @* Live Loop panel — shows when any loop is running *@
+            @if (_liveLoopMsgs.Any())
+            {
+                <RadzenCard class="rz-mb-3" Style="border:2px solid var(--rz-primary);background:var(--rz-base-background-color)">
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px" class="rz-mb-2">
+                        <RadzenIcon Icon="autorenew" Style="font-size:1rem;color:var(--rz-primary);animation:spin 2s linear infinite" />
+                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0" Style="color:var(--rz-primary)">Live Loop</RadzenText>
+                        <RadzenBadge Text="@_liveLoopMsgs.Count.ToString()" BadgeStyle="BadgeStyle.Primary" />
+                    </RadzenStack>
+                    <RadzenStack Gap="6px" Style="max-height:320px;overflow-y:auto" id="live-feed">
+                        @foreach (var msg in _liveLoopMsgs)
+                        {
+                            var isThinking = msg.MessageType == "Thinking";
+                            <RadzenCard class="rz-p-2" Style="@(isThinking
+                                ? "border-left:3px solid var(--rz-warning);opacity:0.75"
+                                : "border-left:3px solid var(--rz-primary)")">
+                                <RadzenStack Gap="3px">
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                        <RadzenIcon Icon="@(isThinking ? "hourglass_empty" : "smart_toy")"
+                                                    Style="font-size:0.85rem" />
+                                        <RadzenText TextStyle="TextStyle.Caption" Style="font-weight:700" class="rz-mb-0">
+                                            @(msg.Sender?.PersonaName ?? msg.Sender?.Name ?? "Agent")
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary rz-ml-auto">
+                                            @msg.SentAt.ToLocalTime().ToString("HH:mm:ss")
+                                        </RadzenText>
+                                    </RadzenStack>
+                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0"
+                                                Style="white-space:pre-wrap;word-break:break-word;font-size:0.8rem">
+                                        @(msg.Content.Length > 500 ? msg.Content[..500] + "…" : msg.Content)
+                                    </RadzenText>
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+                    </RadzenStack>
+                </RadzenCard>
+            }
+
             <RadzenCard>
-                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Agents</RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px" class="rz-mb-3">
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">Agents</RadzenText>
+                    <RadzenButton Icon="refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                  class="rz-ml-auto" Click="@LoadAsync" />
+                </RadzenStack>
                 <RadzenStack Gap="8px">
                     @foreach (var agent in _agents)
                     {
-                        <RadzenCard class="rz-p-2" @onclick="@(() => FilterByAgent(agent.Id))" Style="cursor:pointer;">
+                        var isWorking = agent.Status == AgentStatus.Working;
+                        <RadzenCard class="@($"rz-p-2 {(_filterAgentId == agent.Id ? "rz-background-color-primary-light" : "")}")"
+                                    @onclick="@(() => FilterByAgent(agent.Id))" Style="cursor:pointer;">
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
-                                <RadzenIcon Icon="smart_toy" />
+                                <RadzenIcon Icon="smart_toy" Style="@(isWorking ? "color:var(--rz-warning)" : "")" />
                                 <RadzenStack Gap="2px" Style="flex:1">
-                                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@agent.Name</RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">
+                                        @(agent.PersonaName ?? agent.Name)
+                                        @if (isWorking)
+                                        {
+                                            <span style="color:var(--rz-warning);font-size:0.7rem;margin-left:4px">● thinking…</span>
+                                        }
+                                    </RadzenText>
                                     <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">@agent.Role</RadzenText>
                                 </RadzenStack>
                                 <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(agent.Status)" Text="@agent.Status.ToString()" />
@@ -128,6 +212,68 @@ else
                     }
                 </RadzenStack>
             </RadzenCard>
+
+            @if (_projects.Any())
+            {
+                <RadzenCard class="rz-mt-3">
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Filter by Project</RadzenText>
+                    <RadzenStack Gap="4px">
+                        @foreach (var project in _projects)
+                        {
+                            <RadzenCard class="@($"rz-p-2 {(_filterProjectId == project.Id ? "rz-background-color-info-light" : "")}")"
+                                        @onclick="@(() => FilterByProject(project.Id))" Style="cursor:pointer;">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                                    <RadzenIcon Icon="folder_open" />
+                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0" Style="flex:1">@project.Name</RadzenText>
+                                    <RadzenBadge Text="@project.Status" BadgeStyle="@GetStatusBadge(project.Status)" />
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+                    </RadzenStack>
+                </RadzenCard>
+            }
+
+            <RadzenCard class="rz-mt-3">
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-3" Gap="8px">
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">
+                        <RadzenIcon Icon="memory" class="rz-mr-1" />BMAD Memory
+                    </RadzenText>
+                    @if (_filterProjectId.HasValue)
+                    {
+                        <RadzenBadge Text="@(_projects.FirstOrDefault(p => p.Id == _filterProjectId)?.Name ?? "")" BadgeStyle="BadgeStyle.Info" />
+                    }
+                </RadzenStack>
+                @if (_memories.Any())
+                {
+                    <RadzenStack Gap="4px" Style="max-height:300px;overflow-y:auto">
+                        @foreach (var mem in _memories)
+                        {
+                            <div class="bmad-memory-entry">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="6px">
+                                    <RadzenBadge Text="@mem.Category" BadgeStyle="BadgeStyle.Primary" />
+                                    <RadzenStack Gap="1px" Style="flex:1;min-width:0">
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0" Style="font-family:monospace;font-weight:600">@mem.Key</RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0"
+                                                    Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@mem.Value</RadzenText>
+                                        @if (!string.IsNullOrEmpty(mem.UpdatedByAgent))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                                                by @mem.UpdatedByAgent · @mem.UpdatedAt.ToLocalTime().ToString("g")
+                                            </RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </RadzenStack>
+                            </div>
+                        }
+                    </RadzenStack>
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary">
+                        @(_filterProjectId.HasValue ? "No memory entries for this project." : "Select a project to view memory.")
+                    </RadzenText>
+                }
+            </RadzenCard>
         </RadzenColumn>
     </RadzenRow>
 }
@@ -135,24 +281,96 @@ else
 @code {
     private bool _loading = true;
     private List<AgentMessage> _messages = new();
+    private List<AgentMessage> _liveLoopMsgs = new();
     private List<Agent> _agents = new();
+    private List<Project> _projects = new();
+    private List<BmadMemory> _memories = new();
     private string _newMessage = string.Empty;
     private int? _senderId;
     private int? _receiverId;
+    private int? _projectId;
+    private string? _memoryKey;
     private string _messageType = "Chat";
     private bool _isBroadcast = false;
+    private int? _filterAgentId;
+    private int? _filterProjectId;
+    private Timer? _refreshTimer;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
+        AutoLoopService.ProjectUpdated += OnProjectUpdated;
+        // Poll every 5s — fast enough to feel live, not so fast to flood the DB
+        _refreshTimer = new Timer(async _ =>
+        {
+            if (_agents.Any(a => a.Status == AgentStatus.Working) || _projects.Any(p => p.AutoLoopStatus == "Running"))
+                await InvokeAsync(async () => { await RefreshLiveDataAsync(); StateHasChanged(); });
+        }, null, 5000, 5000);
+    }
+
+    private void OnProjectUpdated(int _)
+    {
+        InvokeAsync(async () => { await RefreshLiveDataAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose()
+    {
+        AutoLoopService.ProjectUpdated -= OnProjectUpdated;
+        _refreshTimer?.Dispose();
     }
 
     private async Task LoadAsync()
     {
         _loading = true;
         _agents = await AgentService.GetAllAgentsAsync();
+        _projects = await ProjectService.GetAllProjectsAsync();
         _messages = await MessageService.GetAllMessagesAsync();
+        await LoadMemoriesAsync();
+        await LoadLiveFeedAsync();
         _loading = false;
+    }
+
+    private async Task RefreshLiveDataAsync()
+    {
+        _agents   = await AgentService.GetAllAgentsAsync();
+        _projects = await ProjectService.GetAllProjectsAsync();
+        if (_filterProjectId.HasValue)
+        {
+            var all = await MessageService.GetAllMessagesAsync();
+            _messages = all.Where(m => m.ProjectId == _filterProjectId).ToList();
+        }
+        else
+        {
+            _messages = await MessageService.GetAllMessagesAsync();
+        }
+        await LoadLiveFeedAsync();
+    }
+
+    private async Task LoadLiveFeedAsync()
+    {
+        // Show last 30 AutoLoop + Thinking messages across all active-loop projects
+        var runningIds = _projects.Where(p => p.AutoLoopStatus == "Running").Select(p => p.Id).ToList();
+        if (!runningIds.Any())
+        {
+            // Keep last batch visible until manually cleared
+            return;
+        }
+        var all = await MessageService.GetAllMessagesAsync();
+        _liveLoopMsgs = all
+            .Where(m => m.ProjectId.HasValue && runningIds.Contains(m.ProjectId.Value) &&
+                        (m.MessageType == "AutoLoop" || m.MessageType == "Thinking" ||
+                         m.MessageType == "PhaseTransition" || m.MessageType == "Handoff"))
+            .OrderBy(m => m.SentAt)
+            .TakeLast(30)
+            .ToList();
+    }
+
+    private async Task LoadMemoriesAsync()
+    {
+        if (_filterProjectId.HasValue)
+            _memories = await MemoryService.GetMemoriesForProjectAsync(_filterProjectId.Value);
+        else
+            _memories = new();
     }
 
     private async Task SendMessage()
@@ -164,27 +382,125 @@ else
             SenderId = _senderId,
             ReceiverId = _isBroadcast ? null : _receiverId,
             MessageType = _messageType,
-            IsBroadcast = _isBroadcast
+            IsBroadcast = _isBroadcast,
+            ProjectId = _projectId,
+            MemoryKey = string.IsNullOrWhiteSpace(_memoryKey) ? null : _memoryKey
         };
         await MessageService.SendMessageAsync(msg);
+
+        // If MemoryUpdate type, also upsert in BMAD memory
+        if (_messageType == "MemoryUpdate" && !string.IsNullOrWhiteSpace(_memoryKey) && _projectId.HasValue)
+        {
+            var senderName = _agents.FirstOrDefault(a => a.Id == _senderId)?.Name;
+            await MemoryService.UpsertMemoryAsync(_memoryKey, _newMessage, _projectId, senderName, "Custom");
+            await LoadMemoriesAsync();
+        }
+
         _newMessage = string.Empty;
         _isBroadcast = false;
-        await LoadAsync();
+        _memoryKey = null;
+        _messages = await MessageService.GetAllMessagesAsync();
         NotificationService.Notify(NotificationSeverity.Success, "Message Sent");
     }
 
     private async Task MarkRead(int messageId)
     {
         await MessageService.MarkAsReadAsync(messageId);
-        await LoadAsync();
+        _messages = await MessageService.GetAllMessagesAsync();
     }
 
     private async Task FilterByAgent(int agentId)
     {
-        _loading = true;
-        _messages = await MessageService.GetMessagesForAgentAsync(agentId);
-        _loading = false;
+        _filterAgentId = _filterAgentId == agentId ? null : agentId;
+        if (_filterAgentId.HasValue)
+        {
+            _filterProjectId = null;
+            _messages = await MessageService.GetMessagesForAgentAsync(_filterAgentId.Value);
+            _memories = new();
+        }
+        else
+        {
+            _messages = await MessageService.GetAllMessagesAsync();
+        }
     }
+
+    private async Task FilterByProject(int projectId)
+    {
+        _filterProjectId = _filterProjectId == projectId ? null : projectId;
+        _filterAgentId = null;
+        if (_filterProjectId.HasValue)
+        {
+            _messages = await MessageService.GetAllMessagesAsync();
+            _messages = _messages.Where(m => m.ProjectId == _filterProjectId).ToList();
+            _memories = await MemoryService.GetMemoriesForProjectAsync(_filterProjectId.Value);
+        }
+        else
+        {
+            _messages = await MessageService.GetAllMessagesAsync();
+            _memories = new();
+        }
+    }
+
+    private async Task ClearFilter()
+    {
+        _filterAgentId = null;
+        _filterProjectId = null;
+        _messages = await MessageService.GetAllMessagesAsync();
+        _memories = new();
+    }
+
+    private string GetMessageCardClass(AgentMessage msg)
+    {
+        if (msg.MessageType == "AutoLoop") return "";
+        if (msg.MessageType == "Thinking") return "rz-background-color-warning-light";
+        if (!msg.IsRead) return "rz-background-color-info-light";
+        return msg.MessageType switch
+        {
+            "ProjectStart"    => "rz-background-color-success-light",
+            "Handoff"         => "rz-background-color-warning-light",
+            "Alert"           => "rz-background-color-danger-light",
+            "MemoryUpdate"    => "rz-background-color-warning-light",
+            "PhaseTransition" => "rz-background-color-success-light",
+            _ => ""
+        };
+    }
+
+    private string GetMessageIcon(string? type) => type switch
+    {
+        "ProjectStart"    => "rocket_launch",
+        "Handoff"         => "swap_horiz",
+        "Request"         => "help_outline",
+        "Response"        => "reply",
+        "Alert"           => "warning",
+        "MemoryUpdate"    => "memory",
+        "Broadcast"       => "campaign",
+        "AutoLoop"        => "psychology",
+        "Thinking"        => "hourglass_empty",
+        "PhaseTransition" => "trending_flat",
+        _ => "message"
+    };
+
+    private BadgeStyle GetMessageTypeBadge(string? type) => type switch
+    {
+        "ProjectStart"    => BadgeStyle.Success,
+        "Handoff"         => BadgeStyle.Warning,
+        "MemoryUpdate"    => BadgeStyle.Info,
+        "Alert"           => BadgeStyle.Danger,
+        "Request"         => BadgeStyle.Primary,
+        "Response"        => BadgeStyle.Secondary,
+        "AutoLoop"        => BadgeStyle.Primary,
+        "Thinking"        => BadgeStyle.Warning,
+        "PhaseTransition" => BadgeStyle.Success,
+        _ => BadgeStyle.Primary
+    };
+
+    private BadgeStyle GetStatusBadge(string status) => status switch
+    {
+        "Active" => BadgeStyle.Success,
+        "Review" => BadgeStyle.Warning,
+        "Complete" => BadgeStyle.Info,
+        _ => BadgeStyle.Secondary
+    };
 
     private BadgeStyle GetStatusBadgeStyle(AgentStatus status) => status switch
     {

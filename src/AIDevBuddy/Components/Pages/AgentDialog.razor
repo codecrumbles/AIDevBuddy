@@ -1,27 +1,110 @@
 @inject DialogService DialogService
+@inject IOllamaService OllamaService
+@inject ILlmSettingsService LlmSettingsService
+@inject NotificationService NotificationService
 
 <RadzenStack Gap="1rem">
-    <RadzenFormField Text="Name" Variant="Variant.Outlined">
-        <RadzenTextBox @bind-Value="Agent.Name" Style="width:100%" />
-    </RadzenFormField>
-    <RadzenFormField Text="Role" Variant="Variant.Outlined">
-        <RadzenDropDown @bind-Value="Agent.Role" Data="@_roles" Style="width:100%" />
-    </RadzenFormField>
-    <RadzenFormField Text="Status" Variant="Variant.Outlined">
-        <RadzenDropDown @bind-Value="Agent.Status" Data="@_statuses" Style="width:100%" />
-    </RadzenFormField>
+    <RadzenRow Gap="0.5rem">
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Name / Codename" Variant="Variant.Outlined">
+                <RadzenTextBox @bind-Value="Agent.Name" Style="width:100%"
+                               Placeholder="e.g. Mary (Analyst)" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Persona Name" Variant="Variant.Outlined">
+                <RadzenTextBox @bind-Value="Agent.PersonaName" Style="width:100%"
+                               Placeholder="e.g. Mary" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow Gap="0.5rem">
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Role" Variant="Variant.Outlined">
+                <RadzenDropDown @bind-Value="Agent.Role" Data="@_roles"
+                                TextProperty="Label" ValueProperty="Role" Style="width:100%" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Status" Variant="Variant.Outlined">
+                <RadzenDropDown @bind-Value="Agent.Status" Data="@_statuses" Style="width:100%" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+    <RadzenRow Gap="0.5rem">
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="BMAD Phase" Variant="Variant.Outlined">
+                <RadzenDropDown @bind-Value="Agent.BmadPhase"
+                                Data="@(new[] { "Analysis", "Planning", "Solutioning", "Implementation", "All" })"
+                                Style="width:100%" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="6">
+            <RadzenFormField Text="Trigger Codes (comma-separated)" Variant="Variant.Outlined">
+                <RadzenTextBox @bind-Value="Agent.TriggerCodes" Style="width:100%"
+                               Placeholder="e.g. CP,VP,EP,CE,IR" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenCard Variant="Variant.Outlined" class="rz-p-3">
+        <RadzenStack Gap="0.5rem">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                <RadzenIcon Icon="computer" />
+                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">Preferred Model (Ollama)</RadzenText>
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="4px" AlignItems="AlignItems.Center">
+                <RadzenFormField Text="Ollama Endpoint" Variant="Variant.Outlined" Style="flex:1">
+                    <RadzenTextBox @bind-Value="_ollamaEndpoint" Style="width:100%"
+                                   Placeholder="http://192.168.100.1:11434" />
+                </RadzenFormField>
+                <RadzenButton Text="@(_fetching ? "Fetching..." : "Fetch Models")"
+                              Icon="refresh" ButtonStyle="ButtonStyle.Light"
+                              Size="ButtonSize.Medium" Click="@FetchModels"
+                              Disabled="@_fetching" Style="height:54px;white-space:nowrap" />
+            </RadzenStack>
+
+            @if (_fetchError != null)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" AllowClose="false">
+                    @_fetchError
+                </RadzenAlert>
+            }
+
+            @if (_ollamaModels.Any())
+            {
+                <RadzenFormField Text="Model" Variant="Variant.Outlined">
+                    <RadzenDropDown @bind-Value="Agent.PreferredModel"
+                                    Data="@_ollamaModels"
+                                    AllowClear="true" AllowFiltering="true"
+                                    Placeholder="Use default model..."
+                                    Style="width:100%" />
+                </RadzenFormField>
+            }
+            else
+            {
+                <RadzenFormField Text="Model (type manually or fetch)" Variant="Variant.Outlined">
+                    <RadzenTextBox @bind-Value="Agent.PreferredModel" Style="width:100%"
+                                   Placeholder="e.g. qwen3.5:2b" />
+                </RadzenFormField>
+            }
+        </RadzenStack>
+    </RadzenCard>
+
     <RadzenFormField Text="Description" Variant="Variant.Outlined">
         <RadzenTextBox @bind-Value="Agent.Description" Style="width:100%" />
     </RadzenFormField>
     <RadzenFormField Text="System Prompt" Variant="Variant.Outlined">
-        <RadzenTextArea @bind-Value="Agent.SystemPrompt" Rows="4" Style="width:100%"
-                        Placeholder="Instructions for this AI agent..." />
+        <RadzenTextArea @bind-Value="Agent.SystemPrompt" Rows="5" Style="width:100%"
+                        Placeholder="BMAD agent persona and instructions..." />
     </RadzenFormField>
     <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" JustifyContent="JustifyContent.End">
         <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Secondary"
                       Click="@(() => DialogService.Close(null))" />
         <RadzenButton Text="@(IsEdit ? "Save" : "Create")" Icon="save" ButtonStyle="ButtonStyle.Primary"
-                      Click="@(() => DialogService.Close(Agent))" Disabled="@string.IsNullOrWhiteSpace(Agent.Name)" />
+                      Click="@Save"
+                      Disabled="@string.IsNullOrWhiteSpace(Agent.Name)" />
     </RadzenStack>
 </RadzenStack>
 
@@ -29,6 +112,69 @@
     [Parameter] public Agent Agent { get; set; } = new();
     [Parameter] public bool IsEdit { get; set; } = false;
 
-    private AgentRole[] _roles = Enum.GetValues<AgentRole>();
+    private List<string> _ollamaModels = new();
+    private string _ollamaEndpoint = string.Empty;
+    private bool _fetching = false;
+    private string? _fetchError;
+
+    private record RoleOption(AgentRole Role, string Label);
+
+    private List<RoleOption> _roles = new()
+    {
+        new(AgentRole.Analyst,        "Analyst (Mary)"),
+        new(AgentRole.TechWriter,     "Tech Writer (Paige)"),
+        new(AgentRole.ProductManager, "Product Manager (John)"),
+        new(AgentRole.UxDesigner,     "UX Designer (Sally)"),
+        new(AgentRole.Architect,      "Architect (Winston)"),
+        new(AgentRole.ScrumMaster,    "Scrum Master (Bob)"),
+        new(AgentRole.Developer,      "Developer (Amelia)"),
+        new(AgentRole.QA,             "QA Engineer (Quinn)"),
+        new(AgentRole.QuickFlowDev,   "Quick Flow Dev (Barry)"),
+    };
+
     private AgentStatus[] _statuses = Enum.GetValues<AgentStatus>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await LlmSettingsService.GetAllSettingsAsync();
+        var local = settings.FirstOrDefault(s => s.Provider == LlmProvider.LocalLlm);
+        _ollamaEndpoint = local?.Endpoint ?? "http://localhost:11434";
+        if (!string.IsNullOrWhiteSpace(_ollamaEndpoint))
+            await FetchModels();
+    }
+
+    private async Task FetchModels()
+    {
+        if (string.IsNullOrWhiteSpace(_ollamaEndpoint))
+        {
+            _fetchError = "No endpoint configured. Enter the Ollama URL above.";
+            return;
+        }
+        _fetching = true;
+        _fetchError = null;
+        StateHasChanged();
+
+        var result = await OllamaService.GetAvailableModelsAsync(_ollamaEndpoint);
+        _ollamaModels = result.Models;
+
+        if (result.Models.Any())
+        {
+            _fetchError = null;
+            NotificationService.Notify(NotificationSeverity.Success, "Models Loaded",
+                $"{result.Models.Count} model(s) from {_ollamaEndpoint}");
+        }
+        else
+        {
+            _fetchError = result.Error ?? $"No models returned from {_ollamaEndpoint}";
+        }
+
+        _fetching = false;
+    }
+
+    private void Save()
+    {
+        // Persist any manually entered endpoint back to the model (we don't save it here,
+        // that's done via LLM Settings — but we do want the model name saved)
+        DialogService.Close(Agent);
+    }
 }

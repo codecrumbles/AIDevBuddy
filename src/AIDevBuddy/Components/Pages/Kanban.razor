@@ -2,12 +2,13 @@
 @rendermode InteractiveServer
 @inject IKanbanService KanbanService
 @inject IAgentService AgentService
+@inject IProjectService ProjectService
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
 <PageTitle>AIDevBuddy - Kanban Board</PageTitle>
 
-<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-4" Gap="8px">
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-4" Gap="8px" Style="flex-wrap:wrap">
     <RadzenText TextStyle="TextStyle.H4" class="rz-mb-0">
         <RadzenIcon Icon="view_kanban" class="rz-mr-2" />Kanban Board
     </RadzenText>
@@ -15,7 +16,15 @@
     {
         <RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="@_board.Title" />
     }
-    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" class="rz-ml-auto">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" class="rz-ml-auto" AlignItems="AlignItems.Center">
+        @if (_projects.Any())
+        {
+            <RadzenDropDown @bind-Value="_filterProjectId" Data="@_projects"
+                            TextProperty="Name" ValueProperty="Id"
+                            AllowClear="true" Placeholder="All Projects"
+                            Style="width:200px"
+                            Change="@(async (object _) => await LoadBoardAsync())" />
+        }
         <RadzenButton Text="New Card" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@OpenCreateCardDialog" Disabled="@(_board == null)" />
     </RadzenStack>
 </RadzenStack>
@@ -49,6 +58,11 @@ else
                                     <RadzenStack Gap="4px">
                                         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px">
                                             <RadzenBadge Text="@card.StoryType" BadgeStyle="@GetStoryTypeBadge(card.StoryType)" />
+                                            @if (card.Project != null)
+                                            {
+                                                <RadzenBadge Text="@card.Project.Name" BadgeStyle="BadgeStyle.Info"
+                                                             Style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" />
+                                            }
                                             <RadzenBadge Text="@card.Priority" BadgeStyle="@GetPriorityBadge(card.Priority)" class="rz-ml-auto" />
                                         </RadzenStack>
                                         <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@card.Title</RadzenText>
@@ -89,17 +103,26 @@ else
     private bool _loading = true;
     private KanbanBoard? _board;
     private List<Agent> _agents = new();
+    private List<Project> _projects = new();
+    private int? _filterProjectId;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadBoardAsync();
         _agents = await AgentService.GetAllAgentsAsync();
+        _projects = await ProjectService.GetAllProjectsAsync();
+        await LoadBoardAsync();
     }
 
     private async Task LoadBoardAsync()
     {
         _loading = true;
         _board = await KanbanService.GetBoardWithColumnsAsync(1);
+        // Apply project filter if set
+        if (_board != null && _filterProjectId.HasValue)
+        {
+            foreach (var col in _board.Columns)
+                col.Cards = col.Cards.Where(c => c.ProjectId == _filterProjectId).ToList();
+        }
         _loading = false;
     }
 
@@ -162,7 +185,7 @@ else
     private string GetColumnHeaderColor(KanbanStatus status) => status switch
     {
         KanbanStatus.Backlog => "#607D8B",
-        KanbanStatus.ToDo => "#2196F3",
+        KanbanStatus.ReadyForDev => "#2196F3",
         KanbanStatus.InProgress => "#FF9800",
         KanbanStatus.Review => "#9C27B0",
         KanbanStatus.Done => "#4CAF50",
@@ -174,6 +197,7 @@ else
         "Bug" => BadgeStyle.Danger,
         "Task" => BadgeStyle.Info,
         "Epic" => BadgeStyle.Warning,
+        "Spike" => BadgeStyle.Secondary,
         _ => BadgeStyle.Primary
     };
 

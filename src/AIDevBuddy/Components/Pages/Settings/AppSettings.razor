@@ -1,5 +1,8 @@
 @page "/settings/app"
 @rendermode InteractiveServer
+@inject Radzen.ThemeService ThemeService
+@inject IWorkspaceService WorkspaceService
+@inject NotificationService NotificationService
 
 <PageTitle>AIDevBuddy - App Settings</PageTitle>
 
@@ -7,7 +10,75 @@
     <RadzenIcon Icon="tune" class="rz-mr-2" />App Settings
 </RadzenText>
 
-<RadzenCard>
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">
+        <RadzenIcon Icon="palette" class="rz-mr-1" />Appearance
+    </RadzenText>
+    <RadzenStack Gap="1rem">
+        <RadzenRow AlignItems="AlignItems.Center">
+            <RadzenColumn Size="6">
+                <RadzenText TextStyle="TextStyle.Body1" class="rz-mb-0"><strong>Theme Mode</strong></RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-color-secondary rz-mb-0">
+                    Switch between light and dark interface
+                </RadzenText>
+            </RadzenColumn>
+            <RadzenColumn Size="6">
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                    <RadzenIcon Icon="light_mode" />
+                    <RadzenToggleButton @bind-Value="_isDark"
+                                        ButtonStyle="ButtonStyle.Primary"
+                                        Change="@OnThemeToggle"
+                                        Style="min-width:60px" />
+                    <RadzenIcon Icon="dark_mode" />
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0 rz-ml-2">
+                        @(_isDark ? "Dark Mode" : "Light Mode")
+                    </RadzenText>
+                </RadzenStack>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <RadzenRow>
+            <RadzenColumn Size="12">
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-2 rz-color-secondary">Choose a theme:</RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" Style="flex-wrap:wrap">
+                    @foreach (var theme in _themes)
+                    {
+                        <RadzenButton Text="@theme.Label" Icon="@theme.Icon"
+                                      ButtonStyle="@(ThemeService.Theme == theme.Name ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                      Click="@(() => ApplyTheme(theme.Name))" />
+                    }
+                </RadzenStack>
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenStack>
+</RadzenCard>
+
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">
+        <RadzenIcon Icon="folder_open" class="rz-mr-1" />Project Workspace
+    </RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3 rz-color-secondary">
+        Agent-generated artifacts (product briefs, PRDs, architecture docs, etc.) are saved as
+        Markdown files under this base folder — one sub-folder per project.
+    </RadzenText>
+    <RadzenStack Gap="0.75rem">
+        <RadzenFormField Text="Base Workspace Path" Variant="Variant.Outlined" Style="width:100%">
+            <RadzenTextBox @bind-Value="_workspacePath" Style="width:100%"
+                           Placeholder="e.g. C:\Users\You\Documents\AIDevBuddy\Projects" />
+        </RadzenFormField>
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="8px">
+            <RadzenButton Text="Save Path" Icon="save" ButtonStyle="ButtonStyle.Primary"
+                          Click="@SaveWorkspacePath" />
+            <RadzenButton Text="Open Base Folder" Icon="open_in_new" ButtonStyle="ButtonStyle.Light"
+                          Click="@OpenWorkspaceBaseFolder" />
+        </RadzenStack>
+        <RadzenText TextStyle="TextStyle.Caption" class="rz-color-secondary rz-mb-0">
+            Example project folder: <strong>@(WorkspaceService.WorkspaceBasePath)\my-project-1\artifacts\prd.md</strong>
+        </RadzenText>
+    </RadzenStack>
+</RadzenCard>
+
+<RadzenCard class="rz-mb-4">
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">About AIDevBuddy</RadzenText>
     <RadzenStack Gap="0.5rem">
         <RadzenRow>
@@ -24,7 +95,7 @@
         </RadzenRow>
         <RadzenRow>
             <RadzenColumn Size="4"><RadzenText TextStyle="TextStyle.Body2"><strong>UI Library:</strong></RadzenText></RadzenColumn>
-            <RadzenColumn Size="8"><RadzenText TextStyle="TextStyle.Body2">Radzen Blazor Components</RadzenText></RadzenColumn>
+            <RadzenColumn Size="8"><RadzenText TextStyle="TextStyle.Body2">Radzen Blazor 5.4</RadzenText></RadzenColumn>
         </RadzenRow>
         <RadzenRow>
             <RadzenColumn Size="4"><RadzenText TextStyle="TextStyle.Body2"><strong>Database:</strong></RadzenText></RadzenColumn>
@@ -33,17 +104,20 @@
     </RadzenStack>
 </RadzenCard>
 
-<RadzenCard class="rz-mt-4">
+<RadzenCard>
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">BMAD Methodology</RadzenText>
     <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3">
-        AIDevBuddy is built on the BMAD (Breakthrough Method for Agile AI-Driven Development) framework.
-        BMAD uses specialized AI agents, each with distinct roles, to guide software development through structured phases.
+        AIDevBuddy is built on the official <strong>BMAD-METHOD</strong> framework
+        (<a href="https://github.com/bmad-code-org/BMAD-METHOD" target="_blank">github.com/bmad-code-org/BMAD-METHOD</a>).
+        BMAD uses 9 named AI agent personas across 4 phases — Analysis, Planning, Solutioning, and Implementation —
+        each passing document artifacts and shared memory (project-context.md) to the next phase.
+        Stories follow a strict status machine: <strong>Backlog → Ready for Dev → In Progress → In Review → Done</strong>.
     </RadzenText>
     <RadzenStack Gap="0.5rem">
         @foreach (var phase in _phases)
         {
             <RadzenStack Orientation="Orientation.Horizontal" Gap="12px" class="rz-p-2">
-                <RadzenIcon Icon="arrow_right" />
+                <RadzenIcon Icon="@phase.Icon" Style="color:var(--rz-primary)" />
                 <RadzenStack Gap="2px">
                     <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@phase.Phase</RadzenText>
                     <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0 rz-color-secondary">@phase.Description</RadzenText>
@@ -54,15 +128,83 @@
 </RadzenCard>
 
 @code {
-    private record BmadPhase(string Phase, string Description);
+    private bool _isDark = false;
+    private string _workspacePath = string.Empty;
+
+    private record ThemeOption(string Name, string Label, string Icon);
+    private record BmadPhase(string Phase, string Description, string Icon);
+
+    private List<ThemeOption> _themes = new()
+    {
+        new("material", "Material Light", "light_mode"),
+        new("material-dark", "Material Dark", "dark_mode"),
+        new("humanistic", "Humanistic", "brush"),
+        new("humanistic-dark", "Humanistic Dark", "nights_stay"),
+        new("software", "Software", "code"),
+        new("software-dark", "Software Dark", "terminal"),
+    };
 
     private List<BmadPhase> _phases = new()
     {
-        new("Idea & Requirements", "Analyst gathers requirements; Product Manager produces PRD"),
-        new("Planning & Architecture", "Architect maps technical blueprint; Project Manager outlines milestones"),
-        new("Work Breakdown", "Product Owner & Scrum Master create detailed development stories"),
-        new("Development", "Developer implements stories with unit tests"),
-        new("QA & Validation", "QA Agent tests and validates against specifications"),
-        new("Orchestration", "Orchestrator coordinates agents and maintains single source of truth")
+        new("Phase 1 — Analysis",
+            "Mary (Analyst) + Paige (Tech Writer): brainstorming, market/domain/technical research, " +
+            "produce product-brief.md. Triggers: BP, MR, DR, TR, CB, DP.",
+            "search"),
+        new("Phase 2 — Planning",
+            "John (PM): create PRD.md (CP), validate (VP), create Epics & Stories (CE). " +
+            "Sally (UX): create ux-spec.md (CU). Reads product-brief.md.",
+            "edit_note"),
+        new("Phase 3 — Solutioning",
+            "Winston (Architect): create architecture.md with ADRs (CA). " +
+            "Implementation Readiness Check (IR) is the gate — must PASS before development. " +
+            "Reads PRD.md + ux-spec.md.",
+            "architecture"),
+        new("Phase 4 — Implementation (Sprint Loop)",
+            "Bob (SM): sprint planning (SP), create stories → ready-for-dev (CS). " +
+            "Amelia (Dev): implement story + tests → in-progress → review (DS). " +
+            "Quinn (QA): adversarial review (Blind Hunter + Edge Case Hunter + Acceptance Auditor). " +
+            "Story statuses: ready-for-dev → in-progress → review → done. " +
+            "Barry (Quick Flow): solo all-phases track for small items (QF).",
+            "code"),
     };
+
+    protected override void OnInitialized()
+    {
+        _isDark = ThemeService.Theme?.Contains("dark") ?? false;
+        _workspacePath = WorkspaceService.WorkspaceBasePath;
+    }
+
+    private void SaveWorkspacePath()
+    {
+        if (string.IsNullOrWhiteSpace(_workspacePath)) return;
+        WorkspaceService.SetWorkspaceBasePath(_workspacePath.Trim());
+        NotificationService.Notify(NotificationSeverity.Success, "Workspace Path Saved",
+            "New projects will use this folder. Restart the app to persist across sessions.");
+    }
+
+    private void OpenWorkspaceBaseFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(WorkspaceService.WorkspaceBasePath);
+            System.Diagnostics.Process.Start("explorer.exe", WorkspaceService.WorkspaceBasePath);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Cannot Open Folder", ex.Message);
+        }
+    }
+
+    private void OnThemeToggle(bool isDark)
+    {
+        var baseName = ThemeService.Theme?.Replace("-dark", "") ?? "material";
+        ApplyTheme(isDark ? $"{baseName}-dark" : baseName);
+    }
+
+    private void ApplyTheme(string themeName)
+    {
+        ThemeService.SetTheme(themeName);
+        _isDark = themeName.Contains("dark");
+        NotificationService.Notify(NotificationSeverity.Success, "Theme Applied", themeName);
+    }
 }

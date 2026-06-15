@@ -2,6 +2,38 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* BMAD Memory entry styles */
+.bmad-memory-entry {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border-left: 3px solid var(--rz-primary);
+    background: var(--rz-base-200, #f5f5f5);
+    margin-bottom: 4px;
+}
+
+/* Message card type accents */
+.msg-type-projectstart {
+    border-left: 3px solid var(--rz-success);
+}
+
+.msg-type-handoff {
+    border-left: 3px solid var(--rz-warning);
+}
+
+.msg-type-memoryupdate {
+    border-left: 3px solid var(--rz-info);
+}
+
+/* Project card hover */
+.project-card-new:hover {
+    background: var(--rz-base-300, #e0e0e0) !important;
+}
+
 a, .btn-link {
     color: #006bb7;
 }

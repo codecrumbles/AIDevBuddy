@@ -1,7 +1,10 @@
 @page "/settings/llm"
 @rendermode InteractiveServer
 @inject ILlmSettingsService LlmSettingsService
+@inject IOllamaService OllamaService
+@inject ICopilotService CopilotService
 @inject NotificationService NotificationService
+@implements IDisposable
 
 <PageTitle>AIDevBuddy - LLM Settings</PageTitle>
 
@@ -21,7 +24,7 @@ else
     <RadzenStack Gap="1.5rem">
         @foreach (var setting in _settings)
         {
-            <RadzenCard>
+            <RadzenCard @key="setting.Id">
                 <RadzenStack Gap="1rem">
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="12px">
                         <RadzenIcon Icon="@GetProviderIcon(setting.Provider)" Style="font-size:2rem" />
@@ -40,7 +43,91 @@ else
                         </RadzenStack>
                     </RadzenStack>
 
-                    @if (setting.Provider != LlmProvider.LocalLlm)
+                    @if (setting.Provider == LlmProvider.Copilot)
+                    {
+                        @* ── GitHub Copilot OAuth Device Flow ── *@
+                        @if (_copilotAuthenticated)
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Success" AllowClose="false">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                                    <RadzenIcon Icon="check_circle" />
+                                    <RadzenText class="rz-mb-0">Connected to GitHub Copilot</RadzenText>
+                                    <RadzenButton Text="Disconnect" Icon="logout" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                  Click="DisconnectCopilot" Style="margin-left:auto" />
+                                </RadzenStack>
+                            </RadzenAlert>
+
+                            @if (_copilotModels.Any())
+                            {
+                                <RadzenFormField Text="Model" Variant="Variant.Outlined" Style="width:100%">
+                                    <RadzenDropDown TValue="string"
+                                                    @bind-Value="setting.ModelName"
+                                                    Data="@_copilotModels"
+                                                    AllowClear="true" AllowFiltering="true"
+                                                    Placeholder="Select a model..."
+                                                    Change="@(_ => StateHasChanged())"
+                                                    Style="width:100%" />
+                                </RadzenFormField>
+                            }
+                            else
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="6px">
+                                    <RadzenFormField Text="Model" Variant="Variant.Outlined" Style="flex:1">
+                                        <RadzenTextBox @bind-Value="setting.ModelName" Style="width:100%"
+                                                       Placeholder="e.g. gpt-4o" />
+                                    </RadzenFormField>
+                                    <RadzenButton Text="Fetch Models" Icon="refresh" ButtonStyle="ButtonStyle.Light"
+                                                  Click="@(async () => await FetchCopilotModels(setting))"
+                                                  Style="height:54px" />
+                                </RadzenStack>
+                            }
+                        }
+                        else if (_copilotDeviceCode != null)
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">
+                                <RadzenStack Gap="8px">
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                                        <RadzenIcon Icon="open_in_browser" />
+                                        <RadzenText class="rz-mb-0" Style="font-weight:600">Authorize AIDevBuddy on GitHub</RadzenText>
+                                    </RadzenStack>
+                                    <RadzenText class="rz-mb-0">
+                                        1. Open <strong>github.com/login/device</strong> in your browser<br />
+                                        2. Enter code: <strong style="font-size:1.2rem;letter-spacing:2px">@_copilotDeviceCode.UserCode</strong>
+                                    </RadzenText>
+                                    <RadzenProgressBar Value="100" ShowValue="false"
+                                                       Mode="ProgressBarMode.Indeterminate" Style="height:4px" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                                        Waiting for authorization… expires in @_copilotDeviceCode.ExpiresIn seconds
+                                    </RadzenText>
+                                    <RadzenButton Text="Cancel" Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                  Click="CancelCopilotAuth" Style="align-self:flex-start" />
+                                </RadzenStack>
+                            </RadzenAlert>
+                        }
+                        else
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Light" AllowClose="false">
+                                Connect using your GitHub account that has an active Copilot subscription. No API key required.
+                            </RadzenAlert>
+                            <RadzenButton Text="Connect with GitHub" Icon="login"
+                                          ButtonStyle="ButtonStyle.Dark"
+                                          Click="@(async () => await StartCopilotAuth(setting))"
+                                          Disabled="@_copilotAuthBusy" />
+                            @if (_copilotError != null)
+                            {
+                                <RadzenAlert AlertStyle="AlertStyle.Danger" AllowClose="true" Close="@(() => _copilotError = null)">
+                                    <RadzenStack Gap="4px">
+                                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">
+                                            <RadzenIcon Icon="bug_report" Style="vertical-align:middle;margin-right:4px" />Debug Info
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0"
+                                                    Style="white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:0.8rem">@_copilotError</RadzenText>
+                                    </RadzenStack>
+                                </RadzenAlert>
+                            }
+                        }
+                    }
+                    else if (setting.Provider != LlmProvider.LocalLlm)
                     {
                         <RadzenRow Gap="0.5rem">
                             <RadzenColumn Size="6">
@@ -55,12 +142,9 @@ else
                                 </RadzenFormField>
                             </RadzenColumn>
                         </RadzenRow>
-                        @if (setting.Provider != LlmProvider.Copilot)
-                        {
-                            <RadzenFormField Text="API Endpoint" Variant="Variant.Outlined" Style="width:100%">
-                                <RadzenTextBox @bind-Value="setting.Endpoint" Style="width:100%" />
-                            </RadzenFormField>
-                        }
+                        <RadzenFormField Text="API Endpoint" Variant="Variant.Outlined" Style="width:100%">
+                            <RadzenTextBox @bind-Value="setting.Endpoint" Style="width:100%" />
+                        </RadzenFormField>
                     }
                     else
                     {
@@ -69,22 +153,92 @@ else
                             Models can be downloaded via the Ollama CLI: ollama pull llama3
                         </RadzenAlert>
                         <RadzenRow Gap="0.5rem">
-                            <RadzenColumn Size="6">
+                            <RadzenColumn Size="8">
                                 <RadzenFormField Text="Ollama Endpoint" Variant="Variant.Outlined" Style="width:100%">
                                     <RadzenTextBox @bind-Value="setting.Endpoint" Style="width:100%" />
                                 </RadzenFormField>
                             </RadzenColumn>
-                            <RadzenColumn Size="6">
-                                <RadzenFormField Text="Model Name" Variant="Variant.Outlined" Style="width:100%">
-                                    <RadzenTextBox @bind-Value="setting.ModelName" Style="width:100%"
-                                                   Placeholder="e.g. llama3, mistral, phi3..." />
-                                </RadzenFormField>
+                            <RadzenColumn Size="4" style="display:flex;align-items:flex-end;">
+                                <RadzenButton Text="Fetch Models" Icon="refresh" ButtonStyle="ButtonStyle.Light"
+                                              Click="@(async () => await FetchOllamaModels(setting.Endpoint))"
+                                              Style="width:100%" />
                             </RadzenColumn>
                         </RadzenRow>
+                        <RadzenFormField Text="Model" Variant="Variant.Outlined" Style="width:100%">
+                            @if (_ollamaModels.Any())
+                            {
+                                <RadzenDropDown TValue="string"
+                                                @bind-Value="setting.ModelName"
+                                                Data="@_ollamaModels"
+                                                AllowClear="true" AllowFiltering="true"
+                                                Placeholder="Select a model..."
+                                                Style="width:100%" />
+                            }
+                            else
+                            {
+                                <RadzenTextBox @bind-Value="setting.ModelName" Style="width:100%"
+                                               Placeholder="e.g. llama3.2:latest — click Fetch Models to load dropdown" />
+                            }
+                        </RadzenFormField>
                         <RadzenFormField Text="Local Model Path (optional)" Variant="Variant.Outlined" Style="width:100%">
                             <RadzenTextBox @bind-Value="setting.LocalModelPath" Style="width:100%"
                                            Placeholder="Path to local GGUF model file..." />
                         </RadzenFormField>
+
+                        @* ── Test Chat ── *@
+                        <RadzenCard Variant="Variant.Outlined" class="rz-p-3" Style="background:var(--rz-base-background-color)">
+                            <RadzenStack Gap="0.6rem">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                    <RadzenIcon Icon="science" />
+                                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">Test Chat</RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-color-secondary rz-mb-0">
+                                        — sends directly to @(setting.ModelName ?? "model") to verify connectivity
+                                    </RadzenText>
+                                </RadzenStack>
+
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="6px" AlignItems="AlignItems.End">
+                                    <RadzenTextArea @bind-Value="_testPrompt" Rows="2" Style="flex:1"
+                                                    Placeholder="e.g. Tell me a joke about containers."
+                                                    Disabled="@_testBusy" />
+                                    <RadzenButton Icon="send" ButtonStyle="ButtonStyle.Primary"
+                                                  Style="height:54px"
+                                                  Disabled="@(string.IsNullOrWhiteSpace(_testPrompt) || _testBusy)"
+                                                  Click="@(async () => await RunTestChat(setting))" />
+                                </RadzenStack>
+
+                                @if (_testBusy)
+                                {
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                        <RadzenProgressBar Value="100" ShowValue="false"
+                                                           Mode="ProgressBarMode.Indeterminate" Style="height:4px;flex:1" />
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                                            Waiting for @(setting.ModelName ?? "model")...
+                                        </RadzenText>
+                                    </RadzenStack>
+                                }
+
+                                @if (_testResponse != null)
+                                {
+                                    <RadzenCard Variant="Variant.Outlined" class="rz-p-2"
+                                                Style="@(_testIsError ? "border-color:var(--rz-danger)" : "border-color:var(--rz-success)")">
+                                        <RadzenStack Gap="4px">
+                                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                                <RadzenIcon Icon="@(_testIsError ? "error" : "check_circle")"
+                                                            Style="@($"color:{(_testIsError ? "var(--rz-danger)" : "var(--rz-success)")}")" />
+                                                <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0" Style="font-weight:600">
+                                                    @(_testIsError ? "Error" : "Response")
+                                                </RadzenText>
+                                                <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary rz-ml-auto">
+                                                    @setting.Endpoint · @setting.ModelName · @_testElapsed
+                                                </RadzenText>
+                                            </RadzenStack>
+                                            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0"
+                                                        Style="white-space:pre-wrap;word-break:break-word">@_testResponse</RadzenText>
+                                        </RadzenStack>
+                                    </RadzenCard>
+                                }
+                            </RadzenStack>
+                        </RadzenCard>
                     }
 
                     <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" JustifyContent="JustifyContent.End">
@@ -93,8 +247,11 @@ else
                             <RadzenButton Text="Set as Default" Icon="star" ButtonStyle="ButtonStyle.Light"
                                           Click="@(async () => await SetDefault(setting.Provider))" />
                         }
-                        <RadzenButton Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary"
-                                      Click="@(async () => await SaveSetting(setting))" />
+                        @if (setting.Provider != LlmProvider.Copilot || _copilotAuthenticated)
+                        {
+                            <RadzenButton Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary"
+                                          Click="@(async () => await SaveSetting(setting))" />
+                        }
                     </RadzenStack>
                 </RadzenStack>
             </RadzenCard>
@@ -105,25 +262,213 @@ else
 @code {
     private bool _loading = true;
     private List<LlmSetting> _settings = new();
+    private List<string> _ollamaModels = new();
+
+    // Test chat state
+    private string _testPrompt = "Tell me a joke about containers.";
+    private string? _testResponse;
+    private bool _testIsError;
+    private bool _testBusy;
+    private string _testElapsed = string.Empty;
+
+    // Copilot OAuth state
+    private bool _copilotAuthenticated;
+    private bool _copilotAuthBusy;
+    private CopilotDeviceCodeResponse? _copilotDeviceCode;
+    private List<string> _copilotModels = new();
+    private CancellationTokenSource? _copilotPollCts;
+    private string? _copilotError;
 
     protected override async Task OnInitializedAsync()
     {
         _settings = await LlmSettingsService.GetAllSettingsAsync();
         _loading = false;
+
+        // Auto-fetch Ollama models if endpoint is set
+        var local = _settings.FirstOrDefault(s => s.Provider == LlmProvider.LocalLlm);
+        if (!string.IsNullOrWhiteSpace(local?.Endpoint))
+            await FetchOllamaModels(local.Endpoint);
+
+        // Check if Copilot is already authenticated
+        var copilotSetting = _settings.FirstOrDefault(s => s.Provider == LlmProvider.Copilot);
+        if (!string.IsNullOrWhiteSpace(copilotSetting?.ApiKey))
+        {
+            _copilotAuthenticated = await CopilotService.IsAuthenticatedAsync(copilotSetting.ApiKey);
+            if (_copilotAuthenticated)
+                await FetchCopilotModels(copilotSetting);
+        }
     }
+
+    // ── Copilot OAuth ─────────────────────────────────────────────────────────
+
+    private async Task StartCopilotAuth(LlmSetting setting)
+    {
+        _copilotAuthBusy = true;
+        _copilotDeviceCode = null;
+        _copilotError = null;
+        StateHasChanged();
+
+        var code = await CopilotService.RequestDeviceCodeAsync();
+        if (code == null)
+        {
+            _copilotError = CopilotService.LastError ?? "Unknown error — check application logs.";
+            NotificationService.Notify(NotificationSeverity.Error, "Auth Failed",
+                "Could not start GitHub device flow. See debug info below.");
+            _copilotAuthBusy = false;
+            return;
+        }
+
+        _copilotDeviceCode = code;
+        _copilotAuthBusy = false;
+        StateHasChanged();
+
+        // Poll in background so the Blazor circuit stays responsive (Cancel button works)
+        _copilotPollCts = new CancellationTokenSource();
+        _ = PollAndFinishCopilotAuthAsync(setting, code);
+    }
+
+    private async Task PollAndFinishCopilotAuthAsync(LlmSetting setting, CopilotDeviceCodeResponse code)
+    {
+        var token = await CopilotService.PollForOAuthTokenAsync(
+            code.DeviceCode, code.Interval, _copilotPollCts!.Token);
+
+        await InvokeAsync(async () =>
+        {
+            _copilotDeviceCode = null;
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                var lastErr = CopilotService.LastError;
+                if (!string.IsNullOrWhiteSpace(lastErr))
+                {
+                    _copilotError = lastErr;
+                    NotificationService.Notify(NotificationSeverity.Error, "Authorization Failed",
+                        "See debug info for details.");
+                }
+                else
+                {
+                    NotificationService.Notify(NotificationSeverity.Warning, "Authorization Cancelled",
+                        "GitHub authorization was not completed.");
+                }
+                StateHasChanged();
+                return;
+            }
+
+            // Persist token as ApiKey
+            setting.ApiKey = token;
+            setting.IsEnabled = true;
+            await LlmSettingsService.UpdateSettingAsync(setting);
+
+            _copilotAuthenticated = true;
+            _copilotModels = await CopilotService.GetModelsAsync(token);
+            if (_copilotModels.Any() && string.IsNullOrWhiteSpace(setting.ModelName))
+                setting.ModelName = _copilotModels.FirstOrDefault(m => m.Contains("gpt-4o")) ?? _copilotModels.First();
+
+            NotificationService.Notify(NotificationSeverity.Success, "Connected",
+                "GitHub Copilot connected successfully.");
+            StateHasChanged();
+        });
+    }
+
+    private void CancelCopilotAuth()
+    {
+        _copilotPollCts?.Cancel();
+        _copilotDeviceCode = null;
+        _copilotAuthBusy = false;
+        StateHasChanged();
+    }
+
+    private async Task DisconnectCopilot()
+    {
+        var setting = _settings.FirstOrDefault(s => s.Provider == LlmProvider.Copilot);
+        if (setting != null)
+        {
+            setting.ApiKey = null;
+            setting.IsEnabled = false;
+            await LlmSettingsService.UpdateSettingAsync(setting);
+        }
+        _copilotAuthenticated = false;
+        _copilotModels.Clear();
+        NotificationService.Notify(NotificationSeverity.Info, "Disconnected", "GitHub Copilot disconnected.");
+    }
+
+    private async Task FetchCopilotModels(LlmSetting setting)
+    {
+        if (string.IsNullOrWhiteSpace(setting.ApiKey)) return;
+        _copilotModels = await CopilotService.GetModelsAsync(setting.ApiKey);
+        if (_copilotModels.Any())
+            NotificationService.Notify(NotificationSeverity.Success, "Models Loaded",
+                $"{_copilotModels.Count} Copilot model(s) loaded.");
+        else
+            NotificationService.Notify(NotificationSeverity.Warning, "No Models",
+                CopilotService.LastError ?? "Could not fetch Copilot models. Try reconnecting.");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── Ollama ────────────────────────────────────────────────────────────────
+
+    private async Task FetchOllamaModels(string? endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint)) return;
+        var result = await OllamaService.GetAvailableModelsAsync(endpoint);
+        _ollamaModels = result.Models;
+        if (result.Models.Any())
+            NotificationService.Notify(NotificationSeverity.Success, "Models Loaded",
+                $"{result.Models.Count} model(s) from {endpoint}");
+        else
+            NotificationService.Notify(NotificationSeverity.Warning, "No Models Found",
+                result.Error ?? "Unknown error");
+    }
+
+    private async Task RunTestChat(LlmSetting setting)
+    {
+        if (string.IsNullOrWhiteSpace(_testPrompt) || string.IsNullOrWhiteSpace(setting.Endpoint)) return;
+        _testBusy = true;
+        _testResponse = null;
+        StateHasChanged();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var messages = new List<OllamaChatMessage>
+        {
+            new("system", "You are a helpful assistant. Keep your response brief."),
+            new("user", _testPrompt)
+        };
+
+        var reply = await OllamaService.ChatAsync(setting.Endpoint, setting.ModelName ?? "llama3", messages);
+        sw.Stop();
+
+        _testIsError = reply.StartsWith("[LLM error");
+        _testResponse = reply;
+        _testElapsed = $"{sw.Elapsed.TotalSeconds:F1}s";
+        _testBusy = false;
+    }
+
+    // ── Shared ────────────────────────────────────────────────────────────────
 
     private async Task SaveSetting(LlmSetting setting)
     {
         await LlmSettingsService.UpdateSettingAsync(setting);
+        _settings = await LlmSettingsService.GetAllSettingsAsync();
         NotificationService.Notify(NotificationSeverity.Success, "Settings Saved", $"{GetProviderName(setting.Provider)} settings updated.");
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task SetDefault(LlmProvider provider)
     {
-        await LlmSettingsService.SetDefaultProviderAsync(provider);
-        _settings = await LlmSettingsService.GetAllSettingsAsync();
-        NotificationService.Notify(NotificationSeverity.Success, "Default Provider Set", $"{GetProviderName(provider)} is now the default LLM.");
+        try
+        {
+            await LlmSettingsService.SetDefaultProviderAsync(provider);
+            _settings = await LlmSettingsService.GetAllSettingsAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Default Provider Set", $"{GetProviderName(provider)} is now the default LLM.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Save Failed", ex.Message);
+        }
+        await InvokeAsync(StateHasChanged);
     }
+
+    public void Dispose() => _copilotPollCts?.Cancel();
 
     private string GetProviderName(LlmProvider p) => p switch
     {
@@ -145,10 +490,10 @@ else
 
     private string GetProviderDescription(LlmProvider p) => p switch
     {
-        LlmProvider.Copilot => "GitHub Copilot API - GPT-4o powered development assistant",
-        LlmProvider.GLM => "Zhipu AI GLM-4 - Powerful bilingual large language model",
-        LlmProvider.Claude => "Anthropic Claude 3.5 Sonnet - Advanced AI assistant",
-        LlmProvider.LocalLlm => "Ollama local inference - Run LLMs on your own hardware",
+        LlmProvider.Copilot => "GitHub Copilot — connect via your GitHub subscription, no API key needed",
+        LlmProvider.GLM => "Zhipu AI GLM-4 — powerful bilingual large language model",
+        LlmProvider.Claude => "Anthropic Claude — advanced AI assistant",
+        LlmProvider.LocalLlm => "Ollama local inference — run LLMs on your own hardware",
         _ => ""
     };
 }

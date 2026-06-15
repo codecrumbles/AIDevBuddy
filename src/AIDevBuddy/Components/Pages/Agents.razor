@@ -1,8 +1,10 @@
 @page "/agents"
 @rendermode InteractiveServer
 @inject IAgentService AgentService
+@inject IAutoLoopService AutoLoopService
 @inject DialogService DialogService
 @inject NotificationService NotificationService
+@implements IDisposable
 
 <PageTitle>AIDevBuddy - Agents</PageTitle>
 
@@ -10,27 +12,130 @@
     <RadzenText TextStyle="TextStyle.H4" class="rz-mb-0">
         <RadzenIcon Icon="smart_toy" class="rz-mr-2" />BMAD Agents
     </RadzenText>
-    <RadzenButton Text="New Agent" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@OpenCreateAgentDialog" class="rz-ml-auto" />
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="8px" class="rz-ml-auto">
+        <RadzenSelectBar @bind-Value="_viewMode" TValue="string">
+            <Items>
+                <RadzenSelectBarItem Text="Cards" Value="@("cards")" Icon="grid_view" />
+                <RadzenSelectBarItem Text="Table" Value="@("table")" Icon="table_rows" />
+            </Items>
+        </RadzenSelectBar>
+        <RadzenButton Text="New Agent" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@OpenCreateAgentDialog" />
+    </RadzenStack>
 </RadzenStack>
 
 @if (_loading)
 {
     <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
 }
+else if (_viewMode == "cards")
+{
+    @foreach (var phase in _phases)
+    {
+        var phaseAgents = _agents.Where(a => a.BmadPhase == phase.Name || (phase.Name == "All" && a.BmadPhase == "All")).ToList();
+        if (!phaseAgents.Any()) continue;
+
+        <RadzenCard class="rz-mb-4">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px" class="rz-mb-3">
+                <RadzenIcon Icon="@phase.Icon" Style="@($"color:{phase.Color};font-size:1.4rem")" />
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0" Style="@($"color:{phase.Color}")">
+                    Phase @phase.Number — @phase.Name
+                </RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary rz-ml-2">@phase.Description</RadzenText>
+            </RadzenStack>
+            <RadzenRow Gap="1rem">
+                @foreach (var agent in phaseAgents)
+                {
+                    <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                        <RadzenCard Style="@($"border-left: 4px solid {phase.Color};{(agent.Status == AgentStatus.Working ? "box-shadow:0 0 0 2px var(--rz-warning);" : "")}")">
+                            <RadzenStack Gap="0.6rem">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="8px">
+                                    <RadzenStack Gap="2px" Style="flex:1">
+                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                            <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">
+                                                @(agent.PersonaName ?? agent.Name)
+                                            </RadzenText>
+                                            <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(agent.Status)"
+                                                         Text="@(agent.Status == AgentStatus.Working ? "● Working" : agent.Status.ToString())" />
+                                        </RadzenStack>
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                                            @GetRoleLabel(agent.Role)
+                                        </RadzenText>
+                                    </RadzenStack>
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="2px">
+                                        <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                      Click="@(() => OpenEditAgentDialog(agent))" />
+                                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                                      Click="@(() => DeleteAgent(agent))" />
+                                    </RadzenStack>
+                                </RadzenStack>
+
+                                @if (!string.IsNullOrEmpty(agent.Description))
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0 rz-color-secondary"
+                                                Style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+                                        @agent.Description
+                                    </RadzenText>
+                                }
+
+                                @if (!string.IsNullOrEmpty(agent.TriggerCodes))
+                                {
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="4px" AlignItems="AlignItems.Center" Style="flex-wrap:wrap">
+                                        <RadzenIcon Icon="bolt" Style="font-size:0.85rem;color:var(--rz-warning)" />
+                                        @foreach (var tc in agent.TriggerCodes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                                        {
+                                            <RadzenBadge Text="@tc.Trim()" BadgeStyle="BadgeStyle.Warning" />
+                                        }
+                                    </RadzenStack>
+                                }
+
+                                <RadzenDropDown @bind-Value="agent.Status" Data="@_statuses"
+                                                Change="@(async (object v) => await UpdateStatus(agent, (AgentStatus)v))"
+                                                Style="width:100%" />
+                            </RadzenStack>
+                        </RadzenCard>
+                    </RadzenColumn>
+                }
+            </RadzenRow>
+        </RadzenCard>
+    }
+}
 else
 {
     <RadzenDataGrid Data="@_agents" TItem="Agent" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="20"
                     GridLines="DataGridGridLines.Horizontal" Density="Density.Default">
         <Columns>
-            <RadzenDataGridColumn TItem="Agent" Property="Name" Title="Name" Width="150px" />
+            <RadzenDataGridColumn TItem="Agent" Property="PersonaName" Title="Persona" Width="100px">
+                <Template Context="agent">
+                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">@(agent.PersonaName ?? "—")</RadzenText>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="Agent" Property="Name" Title="Name" Width="160px" />
             <RadzenDataGridColumn TItem="Agent" Property="Role" Title="Role" Width="140px">
                 <Template Context="agent">
-                    <RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="@agent.Role.ToString()" />
+                    <RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="@GetRoleLabel(agent.Role)" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="Agent" Property="BmadPhase" Title="Phase" Width="120px">
+                <Template Context="agent">
+                    <RadzenBadge Text="@(agent.BmadPhase ?? "—")" BadgeStyle="@GetPhaseBadge(agent.BmadPhase)" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn TItem="Agent" Property="Status" Title="Status" Width="130px">
                 <Template Context="agent">
                     <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(agent.Status)" Text="@agent.Status.ToString()" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="Agent" Property="TriggerCodes" Title="Triggers" Width="150px">
+                <Template Context="agent">
+                    @if (!string.IsNullOrEmpty(agent.TriggerCodes))
+                    {
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="2px" Style="flex-wrap:wrap">
+                            @foreach (var tc in agent.TriggerCodes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                <RadzenBadge Text="@tc.Trim()" BadgeStyle="BadgeStyle.Warning" />
+                            }
+                        </RadzenStack>
+                    }
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn TItem="Agent" Property="Description" Title="Description" />
@@ -53,12 +158,41 @@ else
 
 @code {
     private bool _loading = true;
+    private string _viewMode = "cards";
     private List<Agent> _agents = new();
     private AgentStatus[] _statuses = Enum.GetValues<AgentStatus>();
+    private Timer? _refreshTimer;
+
+    private record PhaseInfo(string Name, string Number, string Description, string Icon, string Color);
+    private List<PhaseInfo> _phases = new()
+    {
+        new("Analysis",       "1", "Mary · Paige — brainstorming, research, product brief",             "search",        "#607D8B"),
+        new("Planning",       "2", "John · Sally — PRD, UX spec, epics",                                "edit_note",     "#2196F3"),
+        new("Solutioning",    "3", "Winston — architecture, ADRs, implementation readiness gate",       "architecture",  "#9C27B0"),
+        new("Implementation", "4", "Bob · Amelia · Quinn — sprint planning, dev, QA, code review",      "code",          "#FF9800"),
+        new("All",            "⚡", "Barry — quick-flow solo track (all phases in one session)",         "bolt",          "#4CAF50"),
+    };
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAgentsAsync();
+        AutoLoopService.ProjectUpdated += OnProjectUpdated;
+        _refreshTimer = new Timer(async _ =>
+        {
+            if (_agents.Any(a => a.Status == AgentStatus.Working))
+                await InvokeAsync(async () => { _agents = await AgentService.GetAllAgentsAsync(); StateHasChanged(); });
+        }, null, 3000, 3000);
+    }
+
+    private void OnProjectUpdated(int _)
+    {
+        InvokeAsync(async () => { _agents = await AgentService.GetAllAgentsAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose()
+    {
+        AutoLoopService.ProjectUpdated -= OnProjectUpdated;
+        _refreshTimer?.Dispose();
     }
 
     private async Task LoadAgentsAsync()
@@ -73,7 +207,7 @@ else
         var agent = new Agent();
         var result = await DialogService.OpenAsync<AgentDialog>("New Agent",
             new Dictionary<string, object> { { "Agent", agent } },
-            new DialogOptions { Width = "500px", CloseDialogOnEsc = true });
+            new DialogOptions { Width = "560px", CloseDialogOnEsc = true });
         if (result is Agent newAgent)
         {
             await AgentService.CreateAgentAsync(newAgent);
@@ -88,14 +222,18 @@ else
         {
             Id = agent.Id,
             Name = agent.Name,
+            PersonaName = agent.PersonaName,
             Role = agent.Role,
             Status = agent.Status,
             Description = agent.Description,
-            SystemPrompt = agent.SystemPrompt
+            SystemPrompt = agent.SystemPrompt,
+            BmadPhase = agent.BmadPhase,
+            TriggerCodes = agent.TriggerCodes,
+            PreferredModel = agent.PreferredModel
         };
         var result = await DialogService.OpenAsync<AgentDialog>("Edit Agent",
             new Dictionary<string, object> { { "Agent", edit }, { "IsEdit", true } },
-            new DialogOptions { Width = "500px", CloseDialogOnEsc = true });
+            new DialogOptions { Width = "560px", CloseDialogOnEsc = true });
         if (result is Agent updatedAgent)
         {
             await AgentService.UpdateAgentAsync(updatedAgent);
@@ -121,6 +259,30 @@ else
         await AgentService.UpdateAgentStatusAsync(agent.Id, status);
         await LoadAgentsAsync();
     }
+
+    private string GetRoleLabel(AgentRole role) => role switch
+    {
+        AgentRole.Analyst => "Analyst",
+        AgentRole.TechWriter => "Tech Writer",
+        AgentRole.ProductManager => "Product Manager",
+        AgentRole.UxDesigner => "UX Designer",
+        AgentRole.Architect => "Architect",
+        AgentRole.ScrumMaster => "Scrum Master",
+        AgentRole.Developer => "Developer",
+        AgentRole.QA => "QA Engineer",
+        AgentRole.QuickFlowDev => "Quick Flow Dev",
+        _ => role.ToString()
+    };
+
+    private BadgeStyle GetPhaseBadge(string? phase) => phase switch
+    {
+        "Analysis" => BadgeStyle.Secondary,
+        "Planning" => BadgeStyle.Info,
+        "Solutioning" => BadgeStyle.Warning,
+        "Implementation" => BadgeStyle.Danger,
+        "All" => BadgeStyle.Success,
+        _ => BadgeStyle.Secondary
+    };
 
     private BadgeStyle GetStatusBadgeStyle(AgentStatus status) => status switch
     {

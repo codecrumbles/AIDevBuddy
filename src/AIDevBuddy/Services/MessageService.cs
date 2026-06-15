@@ -18,6 +18,7 @@ public class MessageService : IMessageService
         return await db.AgentMessages
             .Include(m => m.Sender)
             .Include(m => m.Receiver)
+            .Include(m => m.Project)
             .OrderByDescending(m => m.SentAt)
             .ToListAsync();
     }
@@ -28,8 +29,20 @@ public class MessageService : IMessageService
         return await db.AgentMessages
             .Include(m => m.Sender)
             .Include(m => m.Receiver)
+            .Include(m => m.Project)
             .Where(m => m.ReceiverId == agentId || m.SenderId == agentId || m.IsBroadcast)
             .OrderByDescending(m => m.SentAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<AgentMessage>> GetMessagesForProjectAsync(int projectId)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        return await db.AgentMessages
+            .Include(m => m.Sender)
+            .Include(m => m.Receiver)
+            .Where(m => m.ProjectId == projectId)
+            .OrderBy(m => m.SentAt)
             .ToListAsync();
     }
 

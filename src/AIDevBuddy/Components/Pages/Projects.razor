@@ -1,0 +1,496 @@
+@page "/projects"
+@rendermode InteractiveServer
+@inject IProjectService ProjectService
+@inject IAgentService AgentService
+@inject IMemoryService MemoryService
+@inject IMessageService MessageService
+@inject IAutoLoopService AutoLoopService
+@inject IWorkspaceService WorkspaceService
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@implements IDisposable
+
+<PageTitle>AIDevBuddy - Projects</PageTitle>
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-4" Gap="8px">
+    <RadzenText TextStyle="TextStyle.H4" class="rz-mb-0">
+        <RadzenIcon Icon="folder_open" class="rz-mr-2" />Projects
+    </RadzenText>
+    <RadzenButton Text="New Project" Icon="add" ButtonStyle="ButtonStyle.Primary"
+                  Click="@OpenCreateProjectDialog" class="rz-ml-auto" />
+</RadzenStack>
+
+@if (_loading)
+{
+    <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+}
+else if (!_projects.Any())
+{
+    <RadzenCard>
+        <RadzenStack AlignItems="AlignItems.Center" Gap="1rem" class="rz-p-4">
+            <RadzenIcon Icon="folder_open" Style="font-size:3rem; color:var(--rz-secondary-lighter)" />
+            <RadzenText TextStyle="TextStyle.H6" class="rz-color-secondary">No projects yet</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary">
+                Create your first BMAD project to kick off the AI-driven development workflow.
+            </RadzenText>
+            <RadzenButton Text="Create First Project" Icon="add" ButtonStyle="ButtonStyle.Primary"
+                          Click="@OpenCreateProjectDialog" />
+        </RadzenStack>
+    </RadzenCard>
+}
+else
+{
+    @foreach (var project in _projects)
+    {
+        <RadzenCard class="rz-mb-4">
+            <RadzenStack Gap="0.75rem">
+
+                @* Header row *@
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="8px">
+                    <RadzenStack Gap="4px" Style="flex:1">
+                        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">@project.Name</RadzenText>
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="4px">
+                            <RadzenBadge Text="@project.Status" BadgeStyle="@GetStatusBadge(project.Status)" />
+                            <RadzenBadge Text="@project.BmadPhase" BadgeStyle="BadgeStyle.Secondary" />
+                            @if (project.LeadAgent != null)
+                            {
+                                <RadzenBadge Text="@project.LeadAgent.Name" BadgeStyle="BadgeStyle.Info" />
+                            }
+                        </RadzenStack>
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="4px" AlignItems="AlignItems.Center">
+                        @if (project.Status == "Planning")
+                        {
+                            <RadzenButton Text="Start" Icon="rocket_launch" ButtonStyle="ButtonStyle.Success"
+                                          Size="ButtonSize.Small" Click="@(() => StartProject(project))" />
+                        }
+                        @if (project.AutoLoop && project.Status == "Active")
+                        {
+                            @* AutoLoop controls *@
+                            @if (project.AutoLoopStatus == "Running")
+                            {
+                                <RadzenBadge Text="⚡ Running" BadgeStyle="BadgeStyle.Success" />
+                                <RadzenButton Text="Pause" Icon="pause" ButtonStyle="ButtonStyle.Warning"
+                                              Size="ButtonSize.Small" Click="@(() => PauseLoop(project))" />
+                                <RadzenButton Text="Stop" Icon="stop" ButtonStyle="ButtonStyle.Danger"
+                                              Size="ButtonSize.Small" Click="@(() => StopLoop(project))" />
+                            }
+                            else if (project.AutoLoopStatus == "Paused")
+                            {
+                                <RadzenBadge Text="⏸ Paused" BadgeStyle="BadgeStyle.Warning" />
+                                <RadzenButton Text="Resume" Icon="play_arrow" ButtonStyle="ButtonStyle.Success"
+                                              Size="ButtonSize.Small" Click="@(() => ResumeLoop(project))" />
+                                <RadzenButton Text="Stop" Icon="stop" ButtonStyle="ButtonStyle.Danger"
+                                              Size="ButtonSize.Small" Click="@(() => StopLoop(project))" />
+                            }
+                            else if (project.AutoLoopStatus == "Complete")
+                            {
+                                <RadzenBadge Text="✅ Complete" BadgeStyle="BadgeStyle.Info" />
+                            }
+                            else if (project.AutoLoopStatus == "Error")
+                            {
+                                <RadzenBadge Text="⚠ Error" BadgeStyle="BadgeStyle.Danger" />
+                                <RadzenButton Text="Retry" Icon="refresh" ButtonStyle="ButtonStyle.Warning"
+                                              Size="ButtonSize.Small" Click="@(() => StartLoop(project))" />
+                            }
+                            else
+                            {
+                                <RadzenBadge Text="AutoLoop" BadgeStyle="BadgeStyle.Secondary" />
+                                <RadzenButton Text="Start Loop" Icon="autorenew" ButtonStyle="ButtonStyle.Primary"
+                                              Size="ButtonSize.Small" Click="@(() => StartLoop(project))" />
+                            }
+                        }
+                        <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                      Click="@(() => OpenEditProjectDialog(project))" />
+                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                      Click="@(() => DeleteProject(project))" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                @if (!string.IsNullOrEmpty(project.Description))
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary rz-mb-0">
+                        @project.Description
+                    </RadzenText>
+                }
+
+                @* Workspace folder path *@
+                @{ var workspaceFolder = WorkspaceService.GetProjectFolder(project.Name, project.Id); }
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                    <RadzenIcon Icon="folder" Style="font-size:1rem; color:var(--rz-secondary)" />
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary"
+                                Style="font-family:monospace; word-break:break-all">@workspaceFolder</RadzenText>
+                    <RadzenButton Text="Open" Icon="open_in_new" ButtonStyle="ButtonStyle.Light"
+                                  Size="ButtonSize.ExtraSmall"
+                                  Click="@(() => OpenWorkspaceFolder(workspaceFolder))" />
+                </RadzenStack>
+
+                @if (project.AgentAssignments.Any())
+                {
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="4px" Style="flex-wrap:wrap">
+                        @foreach (var a in project.AgentAssignments.Take(5))
+                        {
+                            <RadzenBadge Text="@(a.Agent.PersonaName ?? a.Agent.Name)" BadgeStyle="BadgeStyle.Secondary" />
+                        }
+                        @if (project.AgentAssignments.Count > 5)
+                        {
+                            <RadzenBadge Text="@($"+{project.AgentAssignments.Count - 5} more")" BadgeStyle="BadgeStyle.Secondary" />
+                        }
+                    </RadzenStack>
+                }
+
+                @* Message feed (active projects) *@
+                @if (project.Status == "Active")
+                {
+                    var msgs = _projectMessages.GetValueOrDefault(project.Id) ?? new();
+                    <RadzenCard Variant="Variant.Outlined" class="rz-p-2" Style="background:var(--rz-base-background-color)">
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px" class="rz-mb-2">
+                            <RadzenIcon Icon="chat" Style="font-size:1rem" />
+                            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-0">Agent Messages</RadzenText>
+                            <RadzenBadge Text="@msgs.Count.ToString()" BadgeStyle="BadgeStyle.Secondary" />
+                            <RadzenButton Icon="refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                          class="rz-ml-auto" Click="@(async () => await LoadProjectMessages(project.Id))" />
+                        </RadzenStack>
+
+                        @if (msgs.Any())
+                        {
+                            <RadzenStack Gap="6px" Style="max-height:260px;overflow-y:auto;padding:4px">
+                                @foreach (var msg in msgs)
+                                {
+                                    var isPm = msg.Sender != null;
+                                    <RadzenCard class="rz-p-2" Style="@($"border-left:3px solid {(isPm ? "var(--rz-primary)" : "var(--rz-secondary)")}")">
+                                        <RadzenStack Gap="2px">
+                                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                                <RadzenIcon Icon="@(isPm ? "smart_toy" : "person")" Style="font-size:0.85rem" />
+                                                <RadzenText TextStyle="TextStyle.Caption" Style="font-weight:600" class="rz-mb-0">
+                                                    @(msg.Sender?.PersonaName ?? msg.Sender?.Name ?? "You")
+                                                    @if (msg.Receiver != null) { <span> → @(msg.Receiver.PersonaName ?? msg.Receiver.Name)</span> }
+                                                    @if (msg.IsBroadcast) { <span> → All</span> }
+                                                </RadzenText>
+                                                <RadzenBadge Text="@(msg.MessageType ?? "Chat")" BadgeStyle="@GetMsgTypeBadge(msg.MessageType)" />
+                                                <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary rz-ml-auto">
+                                                    @msg.SentAt.ToLocalTime().ToString("HH:mm")
+                                                </RadzenText>
+                                            </RadzenStack>
+                                            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-0"
+                                                        Style="white-space:pre-wrap;word-break:break-word">@msg.Content</RadzenText>
+                                        </RadzenStack>
+                                    </RadzenCard>
+                                }
+                            </RadzenStack>
+                        }
+                        else
+                        {
+                            <RadzenText TextStyle="TextStyle.Body2" class="rz-color-secondary rz-p-2">
+                                No messages yet. Start the project to have the PM kick off the workflow.
+                            </RadzenText>
+                        }
+
+                        @* Chat input *@
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="6px" class="rz-mt-2" AlignItems="AlignItems.End">
+                            <RadzenTextArea @bind-Value="_chatInputs[project.Id]" Rows="2" Style="flex:1"
+                                            Placeholder="@($"Message {project.LeadAgent?.PersonaName ?? "PM"}... (uses LLM)")"
+                                            Disabled="@(_sending.GetValueOrDefault(project.Id))" />
+                            <RadzenButton Icon="send" ButtonStyle="ButtonStyle.Primary"
+                                          Style="height:54px"
+                                          Disabled="@(string.IsNullOrWhiteSpace(_chatInputs.GetValueOrDefault(project.Id)) || _sending.GetValueOrDefault(project.Id))"
+                                          Click="@(async () => await SendTopm(project))" />
+                        </RadzenStack>
+                        @if (_sending.GetValueOrDefault(project.Id))
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px" class="rz-mt-1">
+                                <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Style="height:4px;flex:1" />
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                                    @(project.LeadAgent?.PersonaName ?? "PM") is thinking...
+                                </RadzenText>
+                            </RadzenStack>
+                        }
+                    </RadzenCard>
+                }
+
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                    <RadzenIcon Icon="schedule" Style="font-size:0.9rem" />
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-0 rz-color-secondary">
+                        Created @project.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")
+                    </RadzenText>
+                    <RadzenButton Text="Memory" Icon="memory" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  class="rz-ml-auto" Click="@(() => ShowMemory(project))" />
+                </RadzenStack>
+
+            </RadzenStack>
+        </RadzenCard>
+    }
+}
+
+@if (_selectedProject != null && _projectMemories.Any())
+{
+    <RadzenCard class="rz-mt-4">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" class="rz-mb-3" Gap="8px">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-mb-0">
+                <RadzenIcon Icon="memory" class="rz-mr-1" />BMAD Memory — @_selectedProject.Name
+            </RadzenText>
+            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                          class="rz-ml-auto" Click="@(() => _selectedProject = null)" />
+        </RadzenStack>
+        <RadzenDataGrid Data="@_projectMemories" TItem="BmadMemory" Density="Density.Compact"
+                        AllowSorting="true" GridLines="DataGridGridLines.Horizontal">
+            <Columns>
+                <RadzenDataGridColumn TItem="BmadMemory" Property="Category" Title="Category" Width="110px">
+                    <Template Context="m">
+                        <RadzenBadge Text="@m.Category" BadgeStyle="BadgeStyle.Primary" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="BmadMemory" Property="Key" Title="Key" Width="180px" />
+                <RadzenDataGridColumn TItem="BmadMemory" Property="Value" Title="Value" />
+                <RadzenDataGridColumn TItem="BmadMemory" Property="UpdatedByAgent" Title="Agent" Width="130px" />
+                <RadzenDataGridColumn TItem="BmadMemory" Property="UpdatedAt" Title="Updated" Width="140px">
+                    <Template Context="m">@m.UpdatedAt.ToLocalTime().ToString("g")</Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenCard>
+}
+
+@code {
+    private bool _loading = true;
+    private List<Project> _projects = new();
+    private List<Agent> _agents = new();
+    private Project? _selectedProject;
+    private List<BmadMemory> _projectMemories = new();
+
+    // Per-project message feeds and chat state
+    private Dictionary<int, List<AgentMessage>> _projectMessages = new();
+    private Dictionary<int, string> _chatInputs = new();
+    private Dictionary<int, bool> _sending = new();
+
+    // Auto-refresh when loops are running
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        // Subscribe to AutoLoop events for immediate UI refresh
+        AutoLoopService.ProjectUpdated += OnProjectUpdated;
+
+        // Poll every 8 seconds when any loop is running (catches DB changes)
+        _refreshTimer = new Timer(async _ =>
+        {
+            if (_projects.Any(p => p.AutoLoopStatus == "Running"))
+                await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+        }, null, 8000, 8000);
+    }
+
+    private void OnProjectUpdated(int projectId)
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        AutoLoopService.ProjectUpdated -= OnProjectUpdated;
+        _refreshTimer?.Dispose();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _projects = await ProjectService.GetAllProjectsAsync();
+        _agents = await AgentService.GetAllAgentsAsync();
+
+        // Init chat state dictionaries and load messages for active projects
+        foreach (var p in _projects)
+        {
+            _chatInputs.TryAdd(p.Id, string.Empty);
+            _sending.TryAdd(p.Id, false);
+            if (p.Status == "Active")
+                await LoadProjectMessages(p.Id);
+        }
+        _loading = false;
+    }
+
+    private async Task LoadProjectMessages(int projectId)
+    {
+        var msgs = await MessageService.GetMessagesForProjectAsync(projectId);
+        _projectMessages[projectId] = msgs;
+    }
+
+    private async Task SendTopm(Project project)
+    {
+        var input = _chatInputs.GetValueOrDefault(project.Id, string.Empty);
+        if (string.IsNullOrWhiteSpace(input)) return;
+
+        _sending[project.Id] = true;
+        _chatInputs[project.Id] = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            await ProjectService.SendPmMessageAsync(project.Id, input);
+            await LoadProjectMessages(project.Id);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally
+        {
+            _sending[project.Id] = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenCreateProjectDialog()
+    {
+        var project = new Project();
+        var result = await DialogService.OpenAsync<ProjectDialog>("New Project",
+            new Dictionary<string, object> { { "Project", project }, { "AllAgents", _agents } },
+            new DialogOptions { Width = "600px", CloseDialogOnEsc = true });
+
+        if (result is ValueTuple<Project, List<int>> tuple)
+        {
+            await ProjectService.CreateProjectAsync(tuple.Item1, tuple.Item2);
+            await LoadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Project Created", tuple.Item1.Name);
+        }
+    }
+
+    private async Task OpenEditProjectDialog(Project project)
+    {
+        var edit = new Project
+        {
+            Id = project.Id,
+            Name = project.Name,
+            Description = project.Description,
+            Status = project.Status,
+            LeadAgentId = project.LeadAgentId
+        };
+        var result = await DialogService.OpenAsync<ProjectDialog>("Edit Project",
+            new Dictionary<string, object> { { "Project", edit }, { "AllAgents", _agents }, { "IsEdit", true } },
+            new DialogOptions { Width = "600px", CloseDialogOnEsc = true });
+
+        if (result is ValueTuple<Project, List<int>> tuple)
+        {
+            await ProjectService.UpdateProjectAsync(tuple.Item1);
+            await LoadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Project Updated", tuple.Item1.Name);
+        }
+    }
+
+    private async Task DeleteProject(Project project)
+    {
+        var confirmed = await DialogService.Confirm(
+            $"Delete project '{project.Name}'? This will also remove all associated memory and messages.",
+            "Confirm Delete", new ConfirmOptions { OkButtonText = "Delete", CancelButtonText = "Cancel" });
+        if (confirmed == true)
+        {
+            await ProjectService.DeleteProjectAsync(project.Id);
+            await LoadAsync();
+            NotificationService.Notify(NotificationSeverity.Warning, "Project Deleted", project.Name);
+        }
+    }
+
+    private async Task StartProject(Project project)
+    {
+        var loopNote = project.AutoLoop
+            ? " AutoLoop will start automatically and agents will work autonomously."
+            : "";
+        var confirmed = await DialogService.Confirm(
+            $"Start '{project.Name}'? This sets it Active, creates BMAD Kanban epics, and has the PM kick off via LLM.{loopNote}",
+            "Start Project",
+            new ConfirmOptions { OkButtonText = "Start", CancelButtonText = "Cancel" });
+        if (confirmed == true)
+        {
+            _loading = true;
+            StateHasChanged();
+            await ProjectService.StartProjectAsync(project.Id);
+
+            if (project.AutoLoop)
+                await AutoLoopService.StartLoopAsync(project.Id);
+
+            await LoadAsync();
+            var loopMsg = project.AutoLoop ? " AutoLoop is running — agents are working!" : " John is kicking off via LLM.";
+            NotificationService.Notify(NotificationSeverity.Success, "Project Started",
+                $"'{project.Name}' is Active.{loopMsg}");
+        }
+    }
+
+    private async Task StartLoop(Project project)
+    {
+        try
+        {
+            await AutoLoopService.StartLoopAsync(project.Id);
+            await LoadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "AutoLoop Started",
+                $"Agents are now working autonomously on '{project.Name}'.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "AutoLoop Error", ex.Message);
+        }
+    }
+
+    private async Task PauseLoop(Project project)
+    {
+        await AutoLoopService.PauseLoopAsync(project.Id);
+        await LoadAsync();
+        NotificationService.Notify(NotificationSeverity.Warning, "AutoLoop Paused", project.Name);
+    }
+
+    private async Task ResumeLoop(Project project)
+    {
+        await AutoLoopService.ResumeLoopAsync(project.Id);
+        await LoadAsync();
+        NotificationService.Notify(NotificationSeverity.Success, "AutoLoop Resumed", project.Name);
+    }
+
+    private async Task StopLoop(Project project)
+    {
+        await AutoLoopService.StopLoopAsync(project.Id);
+        await LoadAsync();
+        NotificationService.Notify(NotificationSeverity.Info, "AutoLoop Stopped", project.Name);
+    }
+
+    private async Task ShowMemory(Project project)
+    {
+        _selectedProject = project;
+        _projectMemories = await MemoryService.GetMemoriesForProjectAsync(project.Id);
+    }
+
+    private void OpenWorkspaceFolder(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            System.Diagnostics.Process.Start("explorer.exe", path);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Cannot Open Folder", ex.Message);
+        }
+    }
+
+    private BadgeStyle GetStatusBadge(string status) => status switch
+    {
+        "Active"    => BadgeStyle.Success,
+        "Review"    => BadgeStyle.Warning,
+        "Complete"  => BadgeStyle.Info,
+        "On Hold"   => BadgeStyle.Danger,
+        _           => BadgeStyle.Secondary
+    };
+
+    private BadgeStyle GetMsgTypeBadge(string? type) => type switch
+    {
+        "ProjectStart" => BadgeStyle.Success,
+        "Handoff"      => BadgeStyle.Warning,
+        "Request"      => BadgeStyle.Primary,
+        "Response"     => BadgeStyle.Secondary,
+        "MemoryUpdate" => BadgeStyle.Info,
+        "Alert"        => BadgeStyle.Danger,
+        _              => BadgeStyle.Primary
+    };
+}
